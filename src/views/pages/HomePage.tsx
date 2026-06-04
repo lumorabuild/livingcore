@@ -322,16 +322,22 @@ function DialogueTimeline({ turns }: { turns: any[] }) {
   const lastGroupKey = groupKeys[0];
   const lastGroup = lastGroupKey ? groups.get(lastGroupKey) : null;
 
+  const latestTurnId = lastGroup && lastGroup.length > 0 ? lastGroup[lastGroup.length - 1].id || 0 : 0;
+
   return (
-    <div class="space-y-4">
+    <div class="space-y-4" id="dialogue-timeline"
+      data-turn-count={turns.length}
+      data-latest-turn-id={latestTurnId}>
       {/* Most recent group - shown expanded with typing animation */}
       {lastGroup && (
-        <div class="bg-[#141a21] rounded-xl border border-[#2f3336] overflow-hidden">
+        <div id="now-section" class="bg-[#141a21] rounded-xl border border-[#2f3336] overflow-hidden"
+          data-turn-group={lastGroupKey}
+          data-turn-count={turns.length}>
           <div class="px-4 py-2 bg-[#1a1f2e] border-b border-[#2f3336] flex items-center justify-between">
             <span class="text-[11px] font-medium text-[#e7e9ea]">Now</span>
-            <span class="text-[9px] text-[#71767b]">{lastGroup.length} turns</span>
+            <span id="now-turn-count" class="text-[9px] text-[#71767b]">{lastGroup.length} turns</span>
           </div>
-          <div class="p-3 space-y-2">
+          <div id="now-turns-container" class="p-3 space-y-2">
             {lastGroup.map((turn: any, i: number) => (
               <CompactDialogueTurn key={turn.id || i} turn={turn} index={i} isLast={i === lastGroup.length - 1} topFirst={true} />
             ))}

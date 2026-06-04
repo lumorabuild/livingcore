@@ -94,6 +94,17 @@ export async function getDialogueTurnCount(db: D1Database): Promise<number> {
   return row ? parseInt(row.value) || 0 : 0;
 }
 
+export async function getDialogueTurnsAfter(
+  db: D1Database,
+  lastId: number,
+  limit: number = 10
+): Promise<DialogueTurn[]> {
+  const result = await db.prepare(
+    'SELECT * FROM dialogue_turns WHERE id > ? ORDER BY id ASC LIMIT ?'
+  ).bind(lastId, limit).all<DialogueTurn>();
+  return result.results;
+}
+
 // ── Idea Inbox ──
 
 export interface InboxItem {

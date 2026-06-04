@@ -7,6 +7,7 @@ import { createViewRoutes } from './routes/views';
 import * as dialogueEngine from './core/dialogue';
 import * as rssEngine from './core/rss';
 import * as rssOps from './db/rss';
+import * as dialogueOps from './db/dialogue';
 
 type Bindings = {
   DB: D1Database;
@@ -38,6 +39,27 @@ app.get('/__cron', async (c) => {
   return c.json(result);
 });
 
+// SSE endpoint for live polling — returns latest state + new turns
+app.get('/api/poll', async (c) => {
+  const lastTurnId = parseInt(c.req.query('since') || '0');
+  
+  const [state, dialogueCount, newTurns] = await Promise.all([
+    import('./db/packet').then(m => m.getFullState(c.env.DB)),
+    dialogueOps.getDialogueTurnCount(c.env.DB),
+    lastTurnId > 0 
+      ? dialogueOps.getDialogueTurnsAfter(c.env.DB, lastTurnId) 
+      : dialogueOps.getDialogueTurns(c.env.DB, { limit: 10 }),
+  ]);
+
+  return c.json({
+    dialogue_turns: dialogueCount,
+    latest_turn_id: newTurns.length > 0 ? Math.max(...newTurns.map(t => t.id)) : lastTurnId,
+    new_turns: newTurns,
+    coherence: parseFloat(state.system_state?.avg_coherence || '0.4'),
+    packet_count: state.packets?.length || 0,
+  });
+});
+
 // SSR page routes (must be before static asset fallback)
 createViewRoutes(app);
 
@@ -60,89 +82,86 @@ app.all('*', (c) => {
 });
 
 // ── SCHEDULED EVENT HANDLER ──
-// This is what Cloudflare actually calls for cron triggers (every 20 min)
-// The HTTP endpoint /__cron above is for manual testing only
+// Cloudflare calls this for cron triggers (now every 1 min for testing)
 
 export async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledController) {
   ctx.waitUntil(runCronCycle(env.DB));
 }
 
 // ── Shared cron logic ──
+// KEY FIX: RSS → conversation are CHAINED, not parallel.
+// One continuous conversation per cron cycle — not two separate ones.
 
 async function runCronCycle(db: D1Database) {
   try {
-    // Run RSS and thought generation in parallel
-    const [rssResult, chainResult] = await Promise.allSettled([
-      rssEngine.processRSSFeeds(db),
-      generateFullConversationChain(db),
-    ]);
+    // Step 1: Process RSS feeds — generates 3 discussion turns
+    const rssResult = await rssEngine.processRSSFeeds(db);
+    
+    // Step 2: CHAIN from where RSS left off — same turn_group
+    // This creates ONE flowing conversation instead of two separate ones
+    let chainResult = false;
+    if (rssResult.turn_group && rssResult.discussion_turns > 0) {
+      // Get the newest turn in the RSS discussion to continue from it
+      const groupTurns = await dialogueOps.getDialogueTurns(db, { 
+        group: rssResult.turn_group,
+        limit: 10
+      });
+      
+      if (groupTurns.length > 0) {
+        // groupTurns[0] is newest (DESC ordering)
+        const newestTurn = groupTurns[0];
+        const nextSpeaker = newestTurn.speaker === 'kevin' ? 'jenny' : 'kevin';
+        
+        await dialogueEngine.continueDialogueChain(
+          db,
+          newestTurn.content,
+          nextSpeaker,
+          rssResult.turn_group,
+          3  // 3 additional turns → total: 6 turns in one continuous conversation
+        );
+        chainResult = true;
+      }
+    } else {
+      // No new RSS items — generate a standalone conversation from memory
+      chainResult = await generateStandaloneConversation(db);
+    }
 
-    // Check pending rule proposals after everything
+    // Step 3: Check pending rule proposals
     await checkPendingRules(db).catch(() => {});
 
     return {
       success: true,
-      rss: rssResult.status === 'fulfilled' ? rssResult.value : { error: String(rssResult.reason) },
-      conversation_generated: chainResult.status === 'fulfilled' ? chainResult.value : false,
+      rss: rssResult,
+      conversation_generated: chainResult,
     };
   } catch (err) {
     return { success: false, error: String(err) };
   }
 }
 
-// ── Full conversation chain from RSS → dialogue ──
+// ── Standalone conversation (when no new RSS items) ──
 
-async function generateFullConversationChain(db: D1Database): Promise<boolean> {
-  // Get latest RSS items
-  const recentRss = await rssOps.getRecentRssItems(db, 15);
+async function generateStandaloneConversation(db: D1Database): Promise<boolean> {
   const packets = await import('./db/packet').then(m => m.getAllPackets(db));
+  if (packets.length < 3) return false;
 
-  // Pick trigger content: latest RSS item, or a random packet, or a fallback thought
-  let triggerContent: string;
-  let triggerSource: string;
+  // Pick a random packet that's NOT an RSS observation (prefer human content)
+  const humanPackets = packets.filter(p => !p.content.startsWith('📡 RSS:'));
+  const target = humanPackets.length > 0 
+    ? humanPackets[Math.floor(Math.random() * humanPackets.length)]
+    : packets[Math.floor(Math.random() * packets.length)];
 
-  if (recentRss.length > 0) {
-    const rssItem = recentRss[0];
-    triggerContent = `📡 RSS: ${rssItem.title}${rssItem.summary ? ' — ' + rssItem.summary : ''}`;
-    triggerSource = 'rss';
-  } else if (packets.length > 0) {
-    const randomPacket = packets[Math.floor(Math.random() * packets.length)];
-    triggerContent = randomPacket.content;
-    triggerSource = 'memory';
-  } else {
-    triggerContent = 'The system just started. Two agents, Kevin and Jenny, are here to think together. What should they explore first?';
-    triggerSource = 'seed';
-  }
-
-  if (!triggerContent || triggerContent.length < 10) return false;
-
-  // Generate the first turn (Kevin starts — he's the Grounder, always leads)
-  const { generateId } = await import('./core/dialogue');
-  const turnGroup = generateId();
-
+  const turnGroup = dialogueEngine.generateId();
+  
+  // Kevin speaks first
   const firstResult = await dialogueEngine.generateDialogueTurn(
-    db,
-    triggerContent,
-    'kevin',  // Kevin always speaks first
-    turnGroup,
-    triggerSource
+    db, target.content, 'kevin', turnGroup, 'cron'
   );
 
-  // Continue the chain for 3 more turns (total 4: Kevin → Jenny → Kevin → Jenny)
+  // Continue for 3 more turns → total: 4 turns
   await dialogueEngine.continueDialogueChain(
-    db,
-    firstResult.turn.content,
-    'jenny',  // Jenny responds next
-    turnGroup,
-    3  // 3 additional turns = 4 total
-  ).catch(async (err) => {
-    // If chain continuation fails, at least we have the first turn
-    const { logAction } = await import('./db/packet');
-    await logAction(db, 'system', 'cron_chain_partial', undefined, {
-      error: String(err),
-      turnsGenerated: 1
-    }).catch(() => {});
-  });
+    db, firstResult.turn.content, 'jenny', turnGroup, 3
+  ).catch(() => {});
 
   return true;
 }
