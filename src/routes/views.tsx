@@ -8,6 +8,7 @@ import { MemoryPage, fetchMemoryPageData } from '../views/pages/MemoryPage';
 type Bindings = {
   DB: D1Database;
   ASSETS: Fetcher;
+  AI: Ai;
 };
 
 export function createViewRoutes(app: Hono<{ Bindings: Bindings }>) {

@@ -12,6 +12,7 @@ import * as dialogueOps from './db/dialogue';
 type Bindings = {
   DB: D1Database;
   ASSETS: Fetcher;
+  AI: Ai;
 };
 
 type ScheduledController = {
@@ -34,6 +35,8 @@ app.get('/health', (c) => {
 });
 
 // Manual cron trigger (HTTP) — for debugging
+// Note: cron runs the free symbolic engine. The AI budget (8 calls/agent/day)
+// is reserved for user-driven inbox conversations so testing always gets the brain.
 app.get('/__cron', async (c) => {
   const result = await runCronCycle(c.env.DB);
   return c.json(result);
@@ -42,12 +45,12 @@ app.get('/__cron', async (c) => {
 // SSE endpoint for live polling — returns latest state + new turns
 app.get('/api/poll', async (c) => {
   const lastTurnId = parseInt(c.req.query('since') || '0');
-  
+
   const [state, dialogueCount, newTurns] = await Promise.all([
     import('./db/packet').then(m => m.getFullState(c.env.DB)),
     dialogueOps.getDialogueTurnCount(c.env.DB),
-    lastTurnId > 0 
-      ? dialogueOps.getDialogueTurnsAfter(c.env.DB, lastTurnId) 
+    lastTurnId > 0
+      ? dialogueOps.getDialogueTurnsAfter(c.env.DB, lastTurnId)
       : dialogueOps.getDialogueTurns(c.env.DB, { limit: 10 }),
   ]);
 
@@ -85,6 +88,7 @@ app.all('*', (c) => {
 // Cloudflare calls this for cron triggers (now every 1 min for testing)
 
 export async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledController) {
+  // Cron uses the free symbolic engine; AI budget is reserved for inbox testing.
   ctx.waitUntil(runCronCycle(env.DB));
 }
 
@@ -92,38 +96,39 @@ export async function scheduled(event: ScheduledEvent, env: Bindings, ctx: Sched
 // KEY FIX: RSS → conversation are CHAINED, not parallel.
 // One continuous conversation per cron cycle — not two separate ones.
 
-async function runCronCycle(db: D1Database) {
+async function runCronCycle(db: D1Database, ai?: Ai) {
   try {
     // Step 1: Process RSS feeds — generates 3 discussion turns
     const rssResult = await rssEngine.processRSSFeeds(db);
-    
+
     // Step 2: CHAIN from where RSS left off — same turn_group
     // This creates ONE flowing conversation instead of two separate ones
     let chainResult = false;
     if (rssResult.turn_group && rssResult.discussion_turns > 0) {
       // Get the newest turn in the RSS discussion to continue from it
-      const groupTurns = await dialogueOps.getDialogueTurns(db, { 
+      const groupTurns = await dialogueOps.getDialogueTurns(db, {
         group: rssResult.turn_group,
         limit: 10
       });
-      
+
       if (groupTurns.length > 0) {
         // groupTurns[0] is newest (DESC ordering)
         const newestTurn = groupTurns[0];
         const nextSpeaker = newestTurn.speaker === 'kevin' ? 'jenny' : 'kevin';
-        
+
         await dialogueEngine.continueDialogueChain(
           db,
           newestTurn.content,
           nextSpeaker,
           rssResult.turn_group,
-          3  // 3 additional turns → total: 6 turns in one continuous conversation
+          3,  // 3 additional turns → total: 6 turns in one continuous conversation
+          ai
         );
         chainResult = true;
       }
     } else {
       // No new RSS items — generate a standalone conversation from memory
-      chainResult = await generateStandaloneConversation(db);
+      chainResult = await generateStandaloneConversation(db, ai);
     }
 
     // Step 3: Check pending rule proposals
@@ -141,26 +146,26 @@ async function runCronCycle(db: D1Database) {
 
 // ── Standalone conversation (when no new RSS items) ──
 
-async function generateStandaloneConversation(db: D1Database): Promise<boolean> {
+async function generateStandaloneConversation(db: D1Database, ai?: Ai): Promise<boolean> {
   const packets = await import('./db/packet').then(m => m.getAllPackets(db));
   if (packets.length < 3) return false;
 
   // Pick a random packet that's NOT an RSS observation (prefer human content)
   const humanPackets = packets.filter(p => !p.content.startsWith('📡 RSS:'));
-  const target = humanPackets.length > 0 
+  const target = humanPackets.length > 0
     ? humanPackets[Math.floor(Math.random() * humanPackets.length)]
     : packets[Math.floor(Math.random() * packets.length)];
 
   const turnGroup = dialogueEngine.generateId();
-  
+
   // Kevin speaks first
   const firstResult = await dialogueEngine.generateDialogueTurn(
-    db, target.content, 'kevin', turnGroup, 'cron'
+    db, target.content, 'kevin', turnGroup, 'cron', ai
   );
 
   // Continue for 3 more turns → total: 4 turns
   await dialogueEngine.continueDialogueChain(
-    db, firstResult.turn.content, 'jenny', turnGroup, 3
+    db, firstResult.turn.content, 'jenny', turnGroup, 3, ai
   ).catch(() => {});
 
   return true;

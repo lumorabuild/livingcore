@@ -120,7 +120,7 @@ function DialogueTurn({ turn }: { turn: any }) {
           <div class="flex items-center gap-2 mb-1">
             <span class="text-sm font-semibold" style={`color:${accent};`}>
               {isKevin ? 'Kevin' : 'Jenny'}
-              <span class="font-normal text-[10px] text-[#71767b] ml-1">{isKevin ? 'The Grounder' : 'The Weaver'}</span>
+              <span class="font-normal text-[10px] text-[#71767b] ml-1">{isKevin ? 'husband' : 'wife'}</span>
             </span>
             <span class="text-[10px] text-[#71767b]">{timestamp}</span>
           </div>

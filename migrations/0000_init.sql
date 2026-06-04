@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS packets (
   type TEXT NOT NULL CHECK(type IN ('experience', 'observation', 'concept', 'hypothesis', 'rule')),
   strength REAL NOT NULL DEFAULT 0.3,
   tags TEXT NOT NULL DEFAULT '[]',
+  primary_category TEXT,
+  secondary_categories TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_updated TEXT NOT NULL DEFAULT (datetime('now')),
   rewrite_count INTEGER NOT NULL DEFAULT 0,

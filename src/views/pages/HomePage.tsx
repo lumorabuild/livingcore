@@ -110,17 +110,19 @@ export function HomePage({ data }: { data: HomePageData }) {
 // ── Compact Agent Status Bar (replaces the big card layout) ──
 
 function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }: any) {
-  const lastTurn = dialogueTurns[dialogueTurns.length - 1];
-  const lastSpeaker = lastTurn?.speaker || 'kevin';
-  const lastContent = lastTurn?.content || '';
+  // Find each agent's most recent turn independently
+  const allTurns: any[] = dialogueTurns || [];
+  const overallLastTurn = allTurns[allTurns.length - 1];
+  const lastSpeaker = overallLastTurn?.speaker || 'kevin';
   const kevinSpeaking = lastSpeaker === 'kevin';
   const jennySpeaking = lastSpeaker === 'jenny';
 
-  // Detect moods
-  const kevinMood = detectMood(kevinSpeaking ? lastContent : '');
-  const jennyMood = detectMood(jennySpeaking ? lastContent : '');
+  // Detect moods from each agent's last message
+  const kevinLastTurn = [...allTurns].reverse().find((t: any) => t.speaker === 'kevin');
+  const jennyLastTurn = [...allTurns].reverse().find((t: any) => t.speaker === 'jenny');
+  const kevinMood = detectMood(kevinLastTurn?.content || '');
+  const jennyMood = detectMood(jennyLastTurn?.content || '');
 
-  // Stats
   const memories = packets.filter((p: any) => p.type === 'observation' || p.type === 'experience').length;
   const concepts = packets.filter((p: any) => p.type === 'concept').length;
 
@@ -141,7 +143,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
           <div class="min-w-0">
             <div class="flex items-center gap-1.5">
               <span class="text-xs font-semibold text-[#4ecdc4]">Kevin</span>
-              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">Grounder</span>
+              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">husband</span>
             </div>
             <div class="flex items-center gap-1 mt-0.5">
               {kevinSpeaking ? (
@@ -150,7 +152,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
                   <ThinkingBars color="#4ecdc4" />
                 </>
               ) : (
-                <span class="text-[10px] text-[#71767b]">waiting</span>
+                <span class="text-[10px] text-[#71767b]">listening</span>
               )}
             </div>
           </div>
@@ -165,7 +167,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
         <div class="flex items-center gap-2 min-w-0 text-right">
           <div class="min-w-0 order-2">
             <div class="flex items-center gap-1.5 justify-end">
-              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">Weaver</span>
+              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">wife</span>
               <span class="text-xs font-semibold text-[#ff6b9d]">Jenny</span>
             </div>
             <div class="flex items-center gap-1 mt-0.5 justify-end">
@@ -175,7 +177,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
                   <span class="text-[10px] text-[#ff6b9d] font-medium">speaking</span>
                 </>
               ) : (
-                <span class="text-[10px] text-[#71767b]">waiting</span>
+                <span class="text-[10px] text-[#71767b]">listening</span>
               )}
             </div>
           </div>
@@ -390,18 +392,19 @@ function CompactDialogueTurn({ turn, index, isLast, topFirst }: { turn: any; ind
          style={`border-left:2px solid ${color}; padding-left:8px;`}>
       <div class="flex items-center gap-1.5 mb-1">
         <span class="text-[10px] font-semibold" style={`color:${color}`}>{name}</span>
+        <span class="text-[9px] text-[#71767b]">{isKevin ? 'husband' : 'wife'}</span>
         <span class="text-[9px] text-[#71767b]">{new Date(turn.created_at).toLocaleTimeString()}</span>
         {isLast && <span class="text-[9px] text-[#71767b] animate-pulse">▍</span>}
       </div>
       <p class="text-xs text-[#b0b3b8] leading-relaxed">{turn.content}</p>
-      {turn.thought_process && (
+      {(turn.thoughts || turn.thought_process) && (
         <button onclick="toggleThoughts(this)" class="text-[9px] text-[#71767b] hover:text-[#e7e9ea] mt-1">
           🔍 show reasoning
         </button>
       )}
-      {turn.thought_process && (
+      {(turn.thoughts || turn.thought_process) && (
         <div class={`thoughts-content mt-1 ${showReasoning ? '' : 'hidden'}`}>
-          <p class="text-[10px] text-[#71767b] italic leading-relaxed">{turn.thought_process}</p>
+          <p class="text-[10px] text-[#71767b] italic leading-relaxed whitespace-pre-wrap">{turn.thoughts || turn.thought_process}</p>
         </div>
       )}
     </div>

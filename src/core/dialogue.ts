@@ -1,12 +1,14 @@
 // Dialogue Engine — Kevin & Jenny's living conversation
-// Generates natural-sounding dialogue turns using the existing packet memory system.
-// No LLM — pure symbolic generation from memory state.
+// Uses Workers AI (with symbolic fallback) to generate natural dialogue.
+// Kevin: @cf/ibm-granite/granite-4.0-h-micro (The Grounder — husband)
+// Jenny: @cf/zai-org/glm-4.7-flash (The Weaver — wife)
 // Phase 0+: Agents read ThinkingRules before speaking, can propose rule changes.
 
 import { ThoughtPacket, PacketConnection } from '../db/schema';
 import * as packetOps from '../db/packet';
 import * as dialogueOps from '../db/dialogue';
 import * as rulesDb from '../db/rules';
+import { kevinAiSpeak, jennyAiSpeak } from './ai_dialogue';
 import { loadThinkingRules, kevinProposesRuleChange, jennyProposesRuleChange, checkPendingProposals } from './thinking_rules';
 
 // ── Shared helpers ──
@@ -240,7 +242,8 @@ export async function generateDialogueTurn(
   triggerText: string,
   speaker: 'kevin' | 'jenny',
   turnGroup?: string,
-  triggerSource: string = 'manual'
+  triggerSource: string = 'manual',
+  ai?: Ai
 ): Promise<{
   turn: dialogueOps.DialogueTurn;
   nextSpeaker: 'kevin' | 'jenny';
@@ -264,9 +267,23 @@ export async function generateDialogueTurn(
     ? [lastTurn, ...recentDialogue.filter(t => t.id !== lastTurn.id)]
     : recentDialogue;
 
-  // Generate the turn
+  // Generate the turn — try AI first, fall back to symbolic
   let result: { content: string; thoughts: string; relatedIds: string[] };
-  if (speaker === 'kevin') {
+  if (ai) {
+    const aiResult = speaker === 'kevin'
+      ? await kevinAiSpeak(ai, db, triggerText, packets, allRecentTurns)
+      : await jennyAiSpeak(ai, db, triggerText, packets, allRecentTurns);
+
+    if (aiResult.usedAi && aiResult.content) {
+      result = { content: aiResult.content, thoughts: aiResult.thoughts, relatedIds: [] };
+    } else {
+      // Fall back to symbolic
+      const symbolic = speaker === 'kevin'
+        ? kevinSpeak(triggerText, packets, connections, allRecentTurns)
+        : jennySpeak(triggerText, packets, connections, allRecentTurns);
+      result = { ...symbolic, thoughts: aiResult.thoughts + '\n' + symbolic.thoughts };
+    }
+  } else if (speaker === 'kevin') {
     result = kevinSpeak(triggerText, packets, connections, allRecentTurns);
   } else {
     result = jennySpeak(triggerText, packets, connections, allRecentTurns);
@@ -353,7 +370,8 @@ export async function continueDialogueChain(
   initialContent: string,
   firstSpeaker: 'kevin' | 'jenny',
   turnGroup: string,
-  maxTurns: number = 4
+  maxTurns: number = 4,
+  ai?: Ai
 ): Promise<void> {
   let currentSpeaker = firstSpeaker;
   let currentContent = initialContent;
@@ -366,7 +384,8 @@ export async function continueDialogueChain(
         currentContent,
         currentSpeaker,
         turnGroup,
-        'inbox'
+        'inbox',
+        ai
       );
 
       // The next agent speaks about what the previous one said
@@ -423,7 +442,8 @@ async function getLastDialogueTurn(db: D1Database): Promise<dialogueOps.Dialogue
 // ── Cron-triggered thought (safety net) ──
 
 export async function generateStandaloneThought(
-  db: D1Database
+  db: D1Database,
+  ai?: Ai
 ): Promise<dialogueOps.DialogueTurn | null> {
   const [packets, pendingCount] = await Promise.all([
     packetOps.getAllPackets(db),
@@ -442,17 +462,19 @@ export async function generateStandaloneThought(
     target.content,
     speaker,
     turnGroup,
-    'cron'
+    'cron',
+    ai
   );
 
   // If there are pending items, trigger a second speaker
   if (pendingCount > 0) {
-    const secondResult = await generateDialogueTurn(
+    await generateDialogueTurn(
       db,
       result.turn.content,
       result.nextSpeaker,
       turnGroup,
-      'cron'
+      'cron',
+      ai
     );
   }
 

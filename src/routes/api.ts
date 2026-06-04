@@ -10,7 +10,7 @@ import * as rssEngine from '../core/rss';
 import { processInput } from '../core/loop';
 import { getAllCategories } from '../core/categories';
 
-type Bindings = { DB: D1Database };
+type Bindings = { DB: D1Database; AI: Ai };
 
 const api = new Hono<{ Bindings: Bindings }>();
 
@@ -123,13 +123,13 @@ api.post('/inbox', async (c) => {
 
     // Generate first turn synchronously so the frontend gets immediate response
     const firstTurn = await dialogueEngine.generateDialogueTurn(
-      c.env.DB, item.content, firstSpeaker, turnGroup, 'inbox'
+      c.env.DB, item.content, firstSpeaker, turnGroup, 'inbox', c.env.AI
     );
 
     // Chain continues in background (registered with waitUntil)
     runInBackground(c, async () => {
       await dialogueEngine.continueDialogueChain(
-        c.env.DB, firstTurn.turn.content, firstTurn.nextSpeaker, turnGroup, 3
+        c.env.DB, firstTurn.turn.content, firstTurn.nextSpeaker, turnGroup, 3, c.env.AI
       );
       // Also evaluate pending proposals in the same background task
       try {
@@ -231,6 +231,14 @@ api.get('/stats', async (c) => {
   });
 });
 
+// ── AI Usage ──
+
+api.get('/ai/usage', async (c) => {
+  const { getAiDailyUsage } = await import('../core/ai_dialogue');
+  const usage = await getAiDailyUsage(c.env.DB);
+  return c.json({ success: true, data: usage });
+});
+
 // ── RSS ──
 
 api.post('/rss/fetch', async (c) => {
@@ -292,13 +300,13 @@ api.post('/think', async (c) => {
   const content = body.content || 'Continue our conversation...';
 
   const result = await dialogueEngine.generateDialogueTurn(
-    c.env.DB, content, speaker, undefined, 'manual'
+    c.env.DB, content, speaker, undefined, 'manual', c.env.AI
   );
 
   // Chain continues in background
   runInBackground(c, async () => {
     await dialogueEngine.continueDialogueChain(
-      c.env.DB, result.turn.content, result.nextSpeaker, result.turnGroup, 2
+      c.env.DB, result.turn.content, result.nextSpeaker, result.turnGroup, 2, c.env.AI
     );
   });
 

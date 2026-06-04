@@ -4,3 +4,7 @@ dist/
 *.log
 .env
 .env.local
+debug_*.json
+.claude/
+*.local.json
+wrangler-account.json
