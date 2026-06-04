@@ -65,32 +65,29 @@ export function HomePage({ data }: { data: HomePageData }) {
       canonicalUrl="https://livingcore.cc/"
     >
       <div id="app" class="max-w-2xl mx-auto px-4 py-4 min-h-screen">
-        {/* ── Header ── */}
-        <header class="flex items-center justify-between mb-4 border-b border-[#2f3336] pb-3">
+        {/* ── Slim Header ── */}
+        <header class="flex items-center justify-between mb-3 border-b border-[#2f3336] pb-2">
           <div>
-            <h1 class="text-xl font-bold tracking-tight">Living Core</h1>
-            <p class="text-xs text-[#71767b] mt-0.5">Kevin & Jenny — thinking together, in public</p>
+            <h1 class="text-lg font-bold tracking-tight">Living Core</h1>
+            <p class="text-[11px] text-[#71767b]">Kevin & Jenny — thinking together, in public</p>
           </div>
-          <div class="flex items-center gap-3 text-xs text-[#71767b]">
-            <span id="vital-packets" class="font-medium text-[#e7e9ea]">{packetCount}</span> pkts
+          <div class="flex items-center gap-2 text-[11px] text-[#71767b]">
+            <span id="vital-packets" class="font-medium text-[#e7e9ea]">{packetCount}</span>
+            <span>pkts</span>
             <span class="text-[#2f3336]">·</span>
-            <span id="vital-turns" class="font-medium text-[#e7e9ea]">{turnCount}</span> turns
+            <span id="vital-turns" class="font-medium text-[#e7e9ea]">{turnCount}</span>
+            <span>turns</span>
             <span class="text-[#2f3336]">·</span>
-            <span id="vital-coherence" class="font-medium text-[#e7e9ea]">{Math.round(coherenceValue * 100)}%</span>
-            <span class="text-[#2f3336]">·</span>
-            <span id="vital-rss" class="font-medium text-[#e7e9ea]">{rssItems.length}</span> feeds
+            <span id="vital-coherence" class="font-medium">{Math.round(coherenceValue * 100)}%</span>
           </div>
         </header>
 
-        {/* ── Agent Workspace ── */}
-        <AgentWorkspace
+        {/* ── Compact Agent Status Bar ── */}
+        <CompactAgentBar
           dialogueTurns={dialogueTurns}
           coherenceValue={coherenceValue}
           packets={packets}
           activeRules={activeRules}
-          pendingProposals={pendingProposals}
-          recentAdoptions={recentAdoptions}
-          rssItems={rssItems}
         />
 
         {/* ── Idea Inbox ── */}
@@ -102,117 +99,144 @@ export function HomePage({ data }: { data: HomePageData }) {
           packets={packets}
           rssItems={rssItems}
           activeRules={activeRules}
+          pendingProposals={pendingProposals}
+          recentAdoptions={recentAdoptions}
         />
       </div>
     </BaseLayout>
   );
 }
 
-// ── Agent Workspace (top area with Kevin + Jenny side by side) ──
+// ── Compact Agent Status Bar (replaces the big card layout) ──
 
-function AgentWorkspace({ dialogueTurns, coherenceValue, packets, activeRules, pendingProposals, recentAdoptions, rssItems }: any) {
+function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }: any) {
   const lastTurn = dialogueTurns[dialogueTurns.length - 1];
   const lastSpeaker = lastTurn?.speaker || 'kevin';
   const lastContent = lastTurn?.content || '';
   const kevinSpeaking = lastSpeaker === 'kevin';
   const jennySpeaking = lastSpeaker === 'jenny';
 
-  // Get agent moods
-  const kevinMood = (detectMood(kevinSpeaking ? lastContent : '') as any);
-  const jennyMood = (detectMood(jennySpeaking ? lastContent : '') as any);
+  // Detect moods
+  const kevinMood = detectMood(kevinSpeaking ? lastContent : '');
+  const jennyMood = detectMood(jennySpeaking ? lastContent : '');
 
   // Stats
   const memories = packets.filter((p: any) => p.type === 'observation' || p.type === 'experience').length;
   const concepts = packets.filter((p: any) => p.type === 'concept').length;
-  const rulesActive = activeRules.length;
+
+  // Turn sequence: if last 3+ turns, show the pattern
+  const recentSpeakers = dialogueTurns.slice(-4).map((t: any) => t.speaker);
+  const pattern = recentSpeakers.join(' → ') || '';
 
   return (
-    <div class="mb-4 bg-[#1a1f2e] rounded-2xl border border-[#2f3336] p-5">
-      {/* Agent Cards Side by Side */}
-      <div class="flex gap-4 mb-4">
+    <div class="mb-3 bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-3">
+      {/* Agent Row */}
+      <div class="flex items-center justify-between mb-2">
         {/* Kevin */}
-        <div class="flex-1 bg-[#1d2939] rounded-xl p-4 border border-[#2f3336]">
-          <div class="flex items-center gap-3 mb-3">
-            <KevinFace mood={kevinMood} speaking={kevinSpeaking} size={56} showLabel={false} />
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold text-[#4ecdc4]">Kevin</span>
-                <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-1.5 py-0.5 rounded-full">Grounder</span>
-              </div>
-              <div class="flex items-center gap-2 mt-1">
-                {kevinSpeaking ? <ThinkingBars color="#4ecdc4" /> : <span class="text-xs text-[#71767b]">waiting</span>}
-              </div>
+        <div class="flex items-center gap-2 min-w-0">
+          <div class={`agent-indicator relative ${kevinSpeaking ? 'active' : ''} flex-shrink-0`}
+               style={kevinSpeaking ? `border-bottom:2px solid #4ecdc4;padding-bottom:2px;` : ''}>
+            <KevinFace mood={kevinMood} speaking={kevinSpeaking} size={36} showLabel={false} />
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-semibold text-[#4ecdc4]">Kevin</span>
+              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">Grounder</span>
+            </div>
+            <div class="flex items-center gap-1 mt-0.5">
+              {kevinSpeaking ? (
+                <>
+                  <span class="text-[10px] text-[#4ecdc4] font-medium">speaking</span>
+                  <ThinkingBars color="#4ecdc4" />
+                </>
+              ) : (
+                <span class="text-[10px] text-[#71767b]">waiting</span>
+              )}
             </div>
           </div>
-          {kevinSpeaking && (
-            <p class="text-xs text-[#b0b3b8] leading-relaxed line-clamp-3">
-              {lastContent.slice(0, 200)}
-            </p>
-          )}
+        </div>
+
+        {/* Divider */}
+        <div class="text-[#2f3336] text-[10px] px-1 flex-shrink-0">
+          {kevinSpeaking ? '►' : jennySpeaking ? '◄' : '↔'}
         </div>
 
         {/* Jenny */}
-        <div class="flex-1 bg-[#1d2939] rounded-xl p-4 border border-[#2f3336]">
-          <div class="flex items-center gap-3 mb-3">
-            <JennyFace mood={jennyMood} speaking={jennySpeaking} size={56} showLabel={false} />
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold text-[#ff6b9d]">Jenny</span>
-                <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-1.5 py-0.5 rounded-full">Weaver</span>
-              </div>
-              <div class="flex items-center gap-2 mt-1">
-                {jennySpeaking ? <ThinkingBars color="#ff6b9d" /> : <span class="text-xs text-[#71767b]">waiting</span>}
-              </div>
+        <div class="flex items-center gap-2 min-w-0 text-right">
+          <div class="min-w-0 order-2">
+            <div class="flex items-center gap-1.5 justify-end">
+              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">Weaver</span>
+              <span class="text-xs font-semibold text-[#ff6b9d]">Jenny</span>
+            </div>
+            <div class="flex items-center gap-1 mt-0.5 justify-end">
+              {jennySpeaking ? (
+                <>
+                  <ThinkingBars color="#ff6b9d" />
+                  <span class="text-[10px] text-[#ff6b9d] font-medium">speaking</span>
+                </>
+              ) : (
+                <span class="text-[10px] text-[#71767b]">waiting</span>
+              )}
             </div>
           </div>
-          {jennySpeaking && (
-            <p class="text-xs text-[#b0b3b8] leading-relaxed line-clamp-3">
-              {lastContent.slice(0, 200)}
-            </p>
-          )}
+          <div class={`agent-indicator relative ${jennySpeaking ? 'active' : ''} order-1 flex-shrink-0`}
+               style={jennySpeaking ? `border-bottom:2px solid #ff6b9d;padding-bottom:2px;` : ''}>
+            <JennyFace mood={jennyMood} speaking={jennySpeaking} size={36} showLabel={false} />
+          </div>
         </div>
       </div>
 
-      {/* Stats Bar */}
-      <div class="flex items-center justify-between text-xs text-[#71767b] pt-3 border-t border-[#2f3336]">
-        <div class="flex items-center gap-4">
-          <span>
-            <span class="text-[#e7e9ea] font-medium">{memories}</span> memories
-          </span>
-          <span>
-            <span class="text-[#e7e9ea] font-medium">{concepts}</span> concepts
-          </span>
-          <span>
-            <span class="text-[#e7e9ea] font-medium">{rulesActive}</span> rules
-          </span>
+      {/* Turn Sequence & Stats Row */}
+      <div class="flex items-center justify-between text-[10px] text-[#71767b] pt-2 border-t border-[#2f3336]">
+        <div class="flex items-center gap-3">
+          <span>{memories} mem</span>
+          <span>{concepts} conc</span>
+          <span>{activeRules.length} rules</span>
         </div>
-        <CoherenceGauge value={coherenceValue} />
+        <div class="flex items-center gap-2">
+          {pattern && <span class="font-mono text-[9px] opacity-60">{pattern}</span>}
+          <CoherenceGauge value={coherenceValue} size="sm" />
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Inbox Section ──
+// ── Inbox Section (with optional name) ──
 
 function InboxSection() {
   return (
-    <div class="mb-4 bg-[#1a1f2e] rounded-2xl border border-[#2f3336] p-4 card-hover">
-      <div class="flex items-center gap-2 mb-3">
-        <span class="text-sm font-medium">💭 Drop an idea</span>
-        <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-2 py-0.5 rounded-full">anyone</span>
+    <div class="mb-3 bg-[#141a21] rounded-xl border border-[#2f3336] p-3 card-hover">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium">💭 Drop an idea</span>
+          <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-2 py-0.5 rounded-full">anyone</span>
+        </div>
+        <span class="text-[10px] text-[#71767b] italic">agents will discuss it</span>
       </div>
       <textarea id="inbox-input" rows={2}
         class="w-full bg-[#202327] border border-[#2f3336] rounded-xl p-3 text-sm text-[#e7e9ea] resize-none outline-none transition-colors placeholder:text-[#71767b]"
         style="outline-color:#71767b;"
         placeholder="Share a thought, question, or idea..."
       ></textarea>
-      <div class="flex items-center justify-between mt-3">
-        <div class="flex gap-2 text-xs">
-          <button onclick="suggestThought('What if machines could dream?')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336]">💡 Dream?</button>
-          <button onclick="suggestThought('The universe is a thought.')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336]">🌌 Universe</button>
-          <button onclick="suggestThought('What is beauty?')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336]">✨ Beauty</button>
+      <div class="flex items-center justify-between mt-2 gap-2">
+        <div class="flex items-center gap-2 flex-1">
+          {/* Optional name input */}
+          <input id="inbox-name" type="text" maxlength={30}
+            class="w-28 bg-[#202327] border border-[#2f3336] rounded-lg px-2.5 py-1.5 text-xs text-[#e7e9ea] outline-none transition-colors placeholder:text-[#71767b]"
+            style="outline-color:#71767b;"
+            placeholder="Your name (opt)"
+          />
+          <div class="flex gap-1.5 text-[11px]">
+            <button onclick="suggestThought('What if machines could dream?')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336] whitespace-nowrap">💡 Dream?</button>
+            <button onclick="suggestThought('The universe is a thought.')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336] whitespace-nowrap">🌌 Universe</button>
+            <button onclick="suggestThought('What is beauty?')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336] whitespace-nowrap">✨ Beauty</button>
+          </div>
         </div>
-        <button id="inbox-submit" onclick="submitInbox()" class="bg-[#71767b] hover:bg-[#8b8f94] text-white text-sm font-medium px-5 py-2 rounded-full transition-colors disabled:opacity-40">Drop Idea</button>
+        <button id="inbox-submit" onclick="submitInbox()"
+          class="bg-[#71767b] hover:bg-[#8b8f94] text-white text-xs font-medium px-4 py-1.5 rounded-full transition-colors disabled:opacity-40 flex-shrink-0">
+          Drop Idea
+        </button>
       </div>
       <div id="inbox-feedback" class="hidden mt-2 text-xs text-[#4ecdc4] fade-up"></div>
     </div>
@@ -221,16 +245,16 @@ function InboxSection() {
 
 // ── Tab Section ──
 
-function TabSection({ dialogueTurns, packets, rssItems, activeRules }: any) {
+function TabSection({ dialogueTurns, packets, rssItems, activeRules, pendingProposals, recentAdoptions }: any) {
   return (
     <>
       {/* Tab Navigation */}
-      <div class="flex border-b border-[#2f3336] mb-4 gap-0">
+      <div class="flex border-b border-[#2f3336] mb-3 gap-0">
         <TabButton id="dialogue" label="💬 Dialogue" active={true} />
         <TabButton id="memory" label="🧠 Memory" />
         <TabButton id="rss" label="📡 Signals" />
         <TabButton id="evolve" label="🧬 Evolve" />
-        <a href="/archive" class="flex-1 text-center py-3 text-sm font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea]">📜 Archive</a>
+        <a href="/archive" class="flex-1 text-center py-2.5 text-xs font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea]">📜 Archive</a>
       </div>
 
       {/* Dialogue Tab */}
@@ -250,170 +274,200 @@ function TabSection({ dialogueTurns, packets, rssItems, activeRules }: any) {
 
       {/* Evolve Tab */}
       <div id="tab-evolve" class="tab-content hidden">
-        <EvolvePanel activeRules={activeRules} />
+        <EvolvePanel activeRules={activeRules} pendingProposals={pendingProposals} recentAdoptions={recentAdoptions} />
       </div>
     </>
   );
 }
 
 function TabButton({ id, label, active = false }: { id: string; label: string; active?: boolean }) {
+  const activeClass = 'border-b-2 border-[#71767b] text-[#e7e9ea]';
+  const inactiveClass = 'border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea]';
   return (
-    <button onclick={`switchTab('${id}')`}
-      id={`tab-btn-${id}`}
-      class={`flex-1 text-center py-3 text-sm font-medium border-b-2 transition-colors ${
-        active
-          ? 'border-[#71767b] text-[#e7e9ea]'
-          : 'border-transparent text-[#71767b] hover:text-[#e7e9ea]'
-      }`}
-    >{label}</button>
+    <button id={`tab-btn-${id}`}
+      onclick={`switchTab('${id}')`}
+      class={`flex-1 text-center py-2.5 text-xs font-medium transition-colors ${active ? activeClass : inactiveClass}`}>
+      {label}
+    </button>
   );
 }
 
-// ── Dialogue Timeline ──
+// ── Dialogue Timeline (LATEST AT TOP) ──
 
 function DialogueTimeline({ turns }: { turns: any[] }) {
-  if (turns.length === 0) {
-    return <p class="text-sm text-[#71767b] text-center py-8">No dialogue yet. Drop an idea to start the conversation.</p>;
+  if (!turns || turns.length === 0) {
+    return (
+      <div class="text-center py-8">
+        <p class="text-sm text-[#71767b]">No dialogue yet. Agents are warming up...</p>
+      </div>
+    );
   }
 
-  // Group by turn_group
-  const groups: Record<string, any[]> = {};
+  // Group turns by turn_group, keeping the latest at the top
+  const groups = new Map<string, any[]>();
   for (const turn of turns) {
-    const g = turn.turn_group || 'ungrouped';
-    if (!groups[g]) groups[g] = [];
-    groups[g].push(turn);
+    const g = turn.turn_group;
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g)!.push(turn);
   }
+
+  // Sort each group by turn_number ascending
+  // But display groups latest-first
+  const groupKeys = Array.from(groups.keys());
+  // Sort groups so the one with the highest turn_number (latest content) appears first
+  groupKeys.sort((a, b) => {
+    const aTurns = groups.get(a)!;
+    const bTurns = groups.get(b)!;
+    const aLast = aTurns[aTurns.length - 1];
+    const bLast = bTurns[bTurns.length - 1];
+    return new Date(bLast.created_at).getTime() - new Date(aLast.created_at).getTime();
+  });
+
+  const lastGroupKey = groupKeys[0];
+  const lastGroup = lastGroupKey ? groups.get(lastGroupKey) : null;
 
   return (
     <div class="space-y-4">
-      {Object.entries(groups).reverse().map(([group, groupTurns]) => (
-        <div key={group} class="bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-4">
-          <div class="text-[10px] text-[#71767b] mb-3 font-mono">
-            Conversation · {new Date(groupTurns[0].created_at || Date.now()).toLocaleString()}
-            {' · '}
-            <a href={`/conversation/${group}`} class="hover:text-[#e7e9ea] underline underline-offset-2">
-              view full →
-            </a>
+      {/* Most recent group - shown expanded with typing animation */}
+      {lastGroup && (
+        <div class="bg-[#141a21] rounded-xl border border-[#2f3336] overflow-hidden">
+          <div class="px-4 py-2 bg-[#1a1f2e] border-b border-[#2f3336] flex items-center justify-between">
+            <span class="text-[11px] font-medium text-[#e7e9ea]">Now</span>
+            <span class="text-[9px] text-[#71767b]">{lastGroup.length} turns</span>
           </div>
-          <div class="space-y-3">
-            {(groupTurns as any[]).map((turn) => (
-              <DialogueTurn key={turn.id} turn={turn} />
+          <div class="p-3 space-y-2">
+            {lastGroup.map((turn: any, i: number) => (
+              <CompactDialogueTurn key={turn.id || i} turn={turn} index={i} isLast={i === lastGroup.length - 1} topFirst={true} />
             ))}
           </div>
         </div>
-      ))}
+      )}
+
+      {/* Older groups - collapsed summary */}
+      {groupKeys.slice(1, 5).map((g) => {
+        const group = groups.get(g)!;
+        const firstTurn = group[0];
+        const summary = firstTurn?.content?.slice(0, 100) || '';
+        const agents = [...new Set(group.map((t: any) => t.speaker))];
+        const lastTurn = group[group.length - 1];
+        return (
+          <a href={`/conversation/${g}`} key={g}
+            class="block bg-[#141a21] rounded-xl border border-[#2f3336] p-3 card-hover">
+            <div class="flex items-center gap-2 text-[10px] text-[#71767b] mb-1">
+              <span class="px-1.5 py-0.5 rounded-full bg-[#2f3336]">{agents.join(' & ')}</span>
+              <span>{new Date(lastTurn.created_at).toLocaleDateString()}</span>
+            </div>
+            <p class="text-xs text-[#b0b3b8] leading-relaxed line-clamp-2">{summary}</p>
+            <div class="text-[10px] text-[#4ecdc4] mt-1">→ read full</div>
+          </a>
+        );
+      })}
+
+      {groupKeys.length > 6 && (
+        <a href="/archive" class="block text-center text-xs text-[#71767b] hover:text-[#e7e9ea] py-2">
+          View all conversations →
+        </a>
+      )}
     </div>
   );
 }
 
-function DialogueTurn({ turn, expanded = false }: { turn: any; expanded?: boolean }) {
+// ── Compact Dialogue Turn ──
+
+function CompactDialogueTurn({ turn, index, isLast, topFirst }: { turn: any; index: number; isLast: boolean; topFirst?: boolean }) {
   const isKevin = turn.speaker === 'kevin';
-  const accent = isKevin ? '#4ecdc4' : '#ff6b9d';
-  const bgAccent = isKevin ? 'rgba(78,205,196,0.06)' : 'rgba(255,107,157,0.06)';
-  const mood = (detectMood(turn.content || turn.content) as any);
-  const timestamp = turn.created_at ? new Date(turn.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  const color = isKevin ? '#4ecdc4' : '#ff6b9d';
+  const name = isKevin ? 'Kevin' : 'Jenny';
+  const mood = detectMood(turn.content || '');
+
+  // Reasoning hidden by default on the latest turn
+  const showReasoning = index === 0 && !topFirst;
 
   return (
-    <div class="dialogue-turn rounded-xl p-3 border" style={`border-color:${accent}20;background:${bgAccent};animation-delay:0.1s`}>
-      <div class="flex items-start gap-3">
-        <div class="flex-shrink-0 mt-0.5">
-          {isKevin ? <KevinFace mood={mood} speaking={false} size={36} showLabel={false} /> : <JennyFace mood={mood} speaking={false} size={36} showLabel={false} />}
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-sm font-semibold" style={`color:${accent};`}>{isKevin ? 'Kevin' : 'Jenny'} <span class="font-normal text-[10px] text-[#71767b]">{isKevin ? 'The Grounder' : 'The Weaver'}</span></span>
-            <span class="text-[10px] text-[#71767b]">{timestamp}</span>
-          </div>
-          <p class="text-sm text-[#b0b3b8] leading-relaxed">{escapeHtml(turn.content || turn.content)}</p>
-          {turn.thoughts && (
-            <button onclick="toggleThoughts(this)" class="mt-2 text-[10px] text-[#71767b] hover:text-[#e7e9ea] transition-colors">🔍 show reasoning</button>
-          )}
-          {turn.thoughts && (
-            <div class="thoughts-content hidden mt-2 text-[11px] text-[#71767b] bg-[#202327] rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-mono">
-              {escapeHtml(turn.thoughts || '')}
-            </div>
-          )}
-          {turn.turn_group && (
-            <a href={`/conversation/${turn.turn_group}`} class="mt-2 inline-block text-[10px] text-[#71767b] hover:text-[#e7e9ea] underline underline-offset-2">permalink →</a>
-          )}
-        </div>
+    <div class={`dialogue-turn-turn ${topFirst ? 'dialogue-turn-top' : 'dialogue-turn'}`}
+         style={`border-left:2px solid ${color}; padding-left:8px;`}>
+      <div class="flex items-center gap-1.5 mb-1">
+        <span class="text-[10px] font-semibold" style={`color:${color}`}>{name}</span>
+        <span class="text-[9px] text-[#71767b]">{new Date(turn.created_at).toLocaleTimeString()}</span>
+        {isLast && <span class="text-[9px] text-[#71767b] animate-pulse">▍</span>}
       </div>
+      <p class="text-xs text-[#b0b3b8] leading-relaxed">{turn.content}</p>
+      {turn.thought_process && (
+        <button onclick="toggleThoughts(this)" class="text-[9px] text-[#71767b] hover:text-[#e7e9ea] mt-1">
+          🔍 show reasoning
+        </button>
+      )}
+      {turn.thought_process && (
+        <div class={`thoughts-content mt-1 ${showReasoning ? '' : 'hidden'}`}>
+          <p class="text-[10px] text-[#71767b] italic leading-relaxed">{turn.thought_process}</p>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Memory Grid ──
 
+const typeColors: Record<string, string> = {
+  observation: '#4ecdc4',
+  experience: '#ff6b9d',
+  rule: '#e2b714',
+  hypothesis: '#a78bfa',
+  concept: '#4ecdc4', // WAS: '#60a5fa' — NO BLUE
+};
+
 function MemoryGrid({ packets }: { packets: any[] }) {
-  const typeColors: Record<string, string> = {
-    observation: '#4ecdc4',
-    experience: '#ff6b9d',
-    rule: '#e2b714',
-    hypothesis: '#a78bfa',
-    concept: '#60a5fa',
-  };
-
-  // Group by type
-  const grouped: Record<string, any[]> = {};
-  for (const p of packets) {
-    const t = p.type || 'observation';
-    if (!grouped[t]) grouped[t] = [];
-    grouped[t].push(p);
+  if (!packets || packets.length === 0) {
+    return <div class="text-center py-8 text-sm text-[#71767b]">No memories yet.</div>;
   }
-
-  // Show top packets
-  const topPackets = packets.slice(0, 30);
-
-  if (packets.length === 0) {
-    return <p class="text-sm text-[#71767b] text-center py-8">No memories yet. They form as the system learns.</p>;
-  }
-
   return (
-    <div class="grid grid-cols-2 gap-3">
-      {topPackets.map((p: any) => (
-        <a href={`/memory/${p.id}`} key={p.id}
-          class="bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-3 card-hover block"
-        >
-          <div class="flex items-center gap-2 mb-2">
-            <span class="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={`background:${typeColors[p.type] || '#71767b'}20;color:${typeColors[p.type] || '#71767b'};`}>
-              {p.type}
-            </span>
-            <span class="text-[10px] text-[#71767b]">{p.agent}</span>
-            {p.connections && <span class="text-[10px] text-[#71767b]">· {p.connections} links</span>}
-          </div>
-          <p class="text-xs text-[#b0b3b8] leading-relaxed line-clamp-3">{escapeHtml(p.content || '').slice(0, 150)}</p>
-        </a>
-      ))}
+    <div class="space-y-2">
+      {packets.slice(0, 50).map((p: any) => {
+        const color = typeColors[p.type] || '#71767b';
+        return (
+          <a href={`/memory/${p.id}`} key={p.id}
+            class="block bg-[#141a21] rounded-xl border p-3 card-hover"
+            style={`border-color:${color}30;`}>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={`background:${color}20;color:${color};`}>
+                {p.type}
+              </span>
+              {p.primary_category && (
+                <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">{p.primary_category}</span>
+              )}
+            </div>
+            <p class="text-xs text-[#b0b3b8] leading-relaxed line-clamp-2">{p.content}</p>
+          </a>
+        );
+      })}
     </div>
   );
 }
 
-// ── Signal Feed ──
+// ── RSS Signal Feed ──
 
 function SignalFeed({ items }: { items: any[] }) {
-  if (items.length === 0) {
-    return <p class="text-sm text-[#71767b] text-center py-8">No signals yet. RSS feeds will populate this section.</p>;
+  if (!items || items.length === 0) {
+    return <div class="text-center py-8 text-sm text-[#71767b]">No RSS signals yet. Waiting for cron...</div>;
   }
-
   return (
-    <div class="space-y-3">
-      {items.slice(0, 20).map((item: any) => (
-        <div key={item.id} class="bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-4">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="text-[10px] text-[#71767b] font-mono">{item.source}</span>
+    <div class="space-y-2">
+      {items.map((item: any, i: number) => (
+        <div key={item.id || i}
+          class="bg-[#141a21] rounded-xl border border-[#2f3336] p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-[10px] font-medium text-[#e2b714] px-1.5 py-0.5 rounded-full bg-[#e2b714]/10">
+              {item.source}
+            </span>
             {item.category && (
-              <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-[#2f3336] text-[#71767b]">{item.category}</span>
-            )}
-            {item.discussed ? (
-              <span class="text-[10px] text-[#4ecdc4]">✓ discussed</span>
-            ) : (
-              <span class="text-[10px] text-[#71767b]">pending</span>
+              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">{item.category}</span>
             )}
           </div>
-          <h3 class="text-sm font-medium text-[#e7e9ea] mb-1">{escapeHtml(item.title || '')}</h3>
-          {item.excerpt && <p class="text-xs text-[#71767b] leading-relaxed line-clamp-2">{escapeHtml(item.excerpt)}</p>}
+          <h4 class="text-xs font-medium text-[#e7e9ea] mb-1 leading-snug">{item.title}</h4>
+          <p class="text-[10px] text-[#71767b] leading-relaxed line-clamp-2">{item.summary || item.description || ''}</p>
           {item.url && (
-            <a href={item.url} target="_blank" rel="noopener noreferrer" class="mt-2 inline-block text-[10px] text-[#71767b] hover:text-[#e7e9ea] underline underline-offset-2">read original →</a>
+            <a href={item.url} target="_blank" rel="noopener"
+              class="text-[10px] text-[#4ecdc4] hover:underline mt-1 inline-block">Read →</a>
           )}
         </div>
       ))}
@@ -423,52 +477,82 @@ function SignalFeed({ items }: { items: any[] }) {
 
 // ── Evolve Panel ──
 
-function EvolvePanel({ activeRules }: { activeRules: any[] }) {
+function EvolvePanel({ activeRules, pendingProposals, recentAdoptions }: any) {
   return (
     <div class="space-y-4">
-      <div class="bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-4">
-        <div class="flex items-center gap-2 mb-3">
-          <span class="text-sm font-medium">🧬 Active Rules</span>
-          <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-2 py-0.5 rounded-full">{activeRules.length}</span>
+      {/* Active Rules */}
+      <div>
+        <h3 class="text-xs font-semibold text-[#e7e9ea] mb-2">Active Thinking Rules</h3>
+        <div class="space-y-2">
+          {(activeRules || []).map((rule: any) => (
+            <a href={`/evolve/${rule.name}`} key={rule.name}
+              class="block bg-[#141a21] rounded-lg p-3 border border-[#2f3336] card-hover">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-medium text-[#e7e9ea]">{rule.name}</span>
+                <span class="text-[9px] text-[#71767b]">v{rule.version}</span>
+              </div>
+              {rule.description && (
+                <p class="text-[10px] text-[#71767b] line-clamp-2">{rule.description}</p>
+              )}
+            </a>
+          ))}
+          {(!activeRules || activeRules.length === 0) && (
+            <p class="text-xs text-[#71767b] italic">No active rules yet.</p>
+          )}
         </div>
-        {activeRules.length === 0 ? (
-          <p class="text-xs text-[#71767b]">No active rules</p>
-        ) : (
-          <div class="space-y-3">
-            {activeRules.map((rule: any) => (
-              <a href={`/evolve/${rule.name}`} key={rule.name} class="block bg-[#1d2939] rounded-lg p-3 border border-[#2f3336] card-hover">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="text-xs font-semibold text-[#e7e9ea]">{rule.name}</span>
-                  <span class="text-[10px] text-[#4ecdc4]">v{rule.version}</span>
+      </div>
+
+      {/* Pending Proposals */}
+      {(pendingProposals || []).length > 0 && (
+        <div>
+          <h3 class="text-xs font-semibold text-[#e7e9ea] mb-2">Pending Proposals</h3>
+          <div class="space-y-2">
+            {(pendingProposals || []).map((prop: any) => (
+              <div key={prop.id}
+                class="bg-[#141a21] rounded-lg p-3 border border-[#e2b714]/30">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[9px] text-[#e2b714] font-medium">✧ Proposal</span>
+                  <span class="text-[9px] text-[#71767b]">v{prop.current_version} → v{prop.proposed_version}</span>
                 </div>
-                <p class="text-[11px] text-[#71767b] leading-relaxed">{escapeHtml((rule.description || '').slice(0, 120))}</p>
-              </a>
+                <p class="text-[10px] text-[#b0b3b8]">{prop.content || prop.reason || ''}</p>
+              </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Recent Adoptions */}
+      {(recentAdoptions || []).length > 0 && (
+        <div>
+          <h3 class="text-xs font-semibold text-[#e7e9ea] mb-2">Recent Adoptions</h3>
+          <div class="space-y-2">
+            {(recentAdoptions || []).slice(0, 5).map((a: any) => (
+              <div key={a.id}
+                class="bg-[#141a21] rounded-lg p-3 border border-[#4ecdc4]/30">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[9px] text-[#4ecdc4] font-medium">✓ Adopted</span>
+                  <span class="text-[9px] text-[#71767b]">{a.name} v{a.version}</span>
+                </div>
+                {a.description && (
+                  <p class="text-[10px] text-[#71767b]">{a.description}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Helpers ──
+// ── Mood Detection Helper ──
 
-function detectMood(content: string): string {
+function detectMood(content: string): 'neutral' | 'thinking' | 'happy' | 'surprised' | 'sad' {
   if (!content) return 'neutral';
-  const c = content.toLowerCase();
-  if (c.includes('exciting') || c.includes('right about') || c.includes('compelling') || c.includes('oh, i see') || c.includes('agree')) return 'happy';
-  if (c.includes('cautious') || c.includes('don\'t have') || c.includes('barely there') || c.includes('ambiguous')) return 'sad';
-  if (c.includes('interesting') || c.includes('wonder') || c.includes('see threads') || c.includes('wait') || c.includes('actually')) return 'surprised';
-  if (c.includes('hmm') || c.includes('analysis') || c.includes('processing') || c.includes('extract') || c.includes('process')) return 'thinking';
+  const lower = content.toLowerCase();
+  if (lower.includes('!') || lower.includes('wow') || lower.includes('amazing') || lower.includes('beautiful')) return 'happy';
+  if (lower.includes('?') || lower.includes('maybe') || lower.includes('perhaps') || lower.includes('wonder')) return 'thinking';
+  if (lower.includes('hmm') || lower.includes('huh') || lower.includes('interesting')) return 'surprised';
+  if (lower.includes('sorry') || lower.includes('unfortunately') || lower.includes('sad')) return 'sad';
   return 'neutral';
-}
-
-function escapeHtml(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }

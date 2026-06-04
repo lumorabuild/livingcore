@@ -36,7 +36,7 @@ const typeColors: Record<string, string> = {
   experience: '#ff6b9d',
   rule: '#e2b714',
   hypothesis: '#a78bfa',
-  concept: '#60a5fa',
+  concept: '#4ecdc4', // NO BLUE — using teal
 };
 
 export function MemoryPage({ data }: { data: MemoryPageData }) {

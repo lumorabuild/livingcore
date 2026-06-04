@@ -136,9 +136,23 @@ export function ThinkingBars({ color = '#4ecdc4' }: { color?: string }) {
 }
 
 // Coherence gauge
-export function CoherenceGauge({ value }: { value: number }) {
+interface CoherenceGaugeProps {
+  value: number;
+  size?: 'sm' | 'md';
+}
+export function CoherenceGauge({ value, size = 'md' }: CoherenceGaugeProps) {
   const pct = Math.round(value * 100);
   const color = pct >= 60 ? '#4ecdc4' : pct >= 35 ? '#e2b714' : '#ff6b9d';
+  if (size === 'sm') {
+    return (
+      <div class="flex items-center gap-1">
+        <div class="w-10 h-1 bg-[#2f3336] rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-1000" style={`width:${pct}%;background:${color};`}></div>
+        </div>
+        <span class="text-[9px] font-mono text-[#71767b]">{pct}%</span>
+      </div>
+    );
+  }
   return (
     <div class="flex items-center gap-2">
       <div class="w-20 h-1.5 bg-[#2f3336] rounded-full overflow-hidden">

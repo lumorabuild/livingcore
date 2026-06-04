@@ -12,7 +12,7 @@ interface BaseLayoutProps {
 const COLORS = {
   bg: '#0f1419',
   card: '#1a1f2e',
-  surface: '#1d2939',
+  surface: '#141a21', // WARM dark — NO blue tint (was #1d2939)
   input: '#202327',
   border: '#2f3336',
   text: '#e7e9ea',
@@ -62,7 +62,7 @@ tailwind.config = {
     extend: {
       colors: {
         x: {
-          bg: '#0f1419', card: '#1a1f2e', surface: '#1d2939',
+          bg: '#0f1419', card: '#1a1f2e', surface: '#141a21',
           border: '#2f3336', text: '#e7e9ea', dim: '#71767b', input: '#202327'
         },
         kevin: '#4ecdc4', jenny: '#ff6b9d', gold: '#e2b714'
@@ -94,10 +94,17 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
 .thinking-bar:nth-child(3) { animation-delay: 0.3s; }
 @keyframes typeIn { 0% { opacity: 0; transform: translateY(4px); } 100% { opacity: 1; transform: translateY(0); } }
 .dialogue-turn { animation: typeIn 0.3s ease-out both; }
+@keyframes typeInTop { 0% { opacity: 0; transform: translateY(-4px); } 100% { opacity: 1; transform: translateY(0); } }
+.dialogue-turn-top { animation: typeInTop 0.3s ease-out both; }
 .card-hover { transition: border-color 0.2s; }
 .card-hover:hover { border-color: #71767b; }
 .category-chip { transition: all 0.15s ease; cursor: pointer; }
 .category-chip:hover { opacity: 0.8; transform: translateY(-1px); }
 a { color: inherit; text-decoration: none; }
+/* Compact agent indicator */
+.agent-indicator { transition: all 0.2s ease; }
+.agent-indicator.active { border-color: currentColor; }
+/* Typing cursor for active agent */
+.agent-cursor { display: inline-block; width: 2px; height: 14px; animation: blink 0.8s step-end infinite; vertical-align: middle; }
 `;
 }

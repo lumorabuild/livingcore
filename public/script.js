@@ -17,11 +17,11 @@
 
     // Update tab button styles
     document.querySelectorAll('[id^="tab-btn-"]').forEach(function (btn) {
-      btn.className = 'flex-1 text-center py-3 text-sm font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea]';
+      btn.className = 'flex-1 text-center py-2.5 text-xs font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea]';
     });
     var activeBtn = document.getElementById('tab-btn-' + tabId);
     if (activeBtn) {
-      activeBtn.className = 'flex-1 text-center py-3 text-sm font-medium border-b-2 border-[#71767b] text-[#e7e9ea]';
+      activeBtn.className = 'flex-1 text-center py-2.5 text-xs font-medium border-b-2 border-[#71767b] text-[#e7e9ea]';
     }
   };
 
@@ -37,13 +37,25 @@
     }
   };
 
-  // ── Inbox Submission ──
+  // ── Suggest Thought (from chip buttons) ──
+
+  window.suggestThought = function (text) {
+    var input = document.getElementById('inbox-input');
+    if (input) {
+      input.value = text;
+      input.focus();
+    }
+  };
+
+  // ── Inbox Submission (with optional name) ──
 
   window.submitInbox = async function () {
     var input = document.getElementById('inbox-input');
+    var nameInput = document.getElementById('inbox-name');
     var submitBtn = document.getElementById('inbox-submit');
     var feedback = document.getElementById('inbox-feedback');
     var text = (input && input.value.trim()) || '';
+    var userName = (nameInput && nameInput.value.trim()) || '';
 
     if (!text) {
       input && input.focus();
@@ -53,18 +65,26 @@
     submitBtn && (submitBtn.disabled = true);
     submitBtn && (submitBtn.textContent = 'Sending...');
 
+    var payload = { content: text, author: 'web' };
+    if (userName) {
+      payload.author = userName;
+    }
+
     try {
       var resp = await fetch('/api/inbox', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text, author: 'web' })
+        body: JSON.stringify(payload)
       });
       var data = await resp.json();
 
       if (data.success) {
         input && (input.value = '');
         if (feedback) {
-          feedback.textContent = '✨ Kevin & Jenny are discussing your idea...';
+          var msg = userName
+            ? '✨ ' + userName + ' — Kevin & Jenny are discussing your idea...'
+            : '✨ Kevin & Jenny are discussing your idea...';
+          feedback.textContent = msg;
           feedback.classList.remove('hidden');
           setTimeout(function () {
             feedback.classList.add('hidden');
@@ -91,81 +111,51 @@
     }
   };
 
-  window.suggestThought = function (thought) {
-    var input = document.getElementById('inbox-input');
-    if (input) {
-      input.value = thought;
-      input.focus();
-    }
-  };
+  // ── Live Polling (every 15s) ──
 
-  // ── Typing Animation for Recent Turns ──
+  var POLL_INTERVAL = 15000;
+  var pollTimer = null;
 
-  function animateTyping() {
-    var turns = document.querySelectorAll('.dialogue-turn p');
-    // Only animate the last 2-3 turns
-    var recent = Array.prototype.slice.call(turns).slice(-3);
-    recent.forEach(function (el, idx) {
-      var text = el.textContent;
-      if (el.dataset.animated) return;
-      el.dataset.animated = 'true';
-      el.textContent = '';
-      var i = 0;
-      var iv = setInterval(function () {
-        if (i < text.length) {
-          el.textContent += text[i];
-          i++;
-        } else {
-          clearInterval(iv);
-        }
-      }, 15 + idx * 5);
-    });
+  function startPolling() {
+    pollTimer = setInterval(pollState, POLL_INTERVAL);
   }
 
-  // Run typing animation on load
-  animateTyping();
+  async function pollState() {
+    try {
+      var resp = await fetch('/api/state');
+      var result = await resp.json();
+      if (!result.success || !result.data) return;
 
-  // ── Live Polling (every 10 seconds) ──
+      var s = result.data;
 
-  setInterval(function () {
-    fetch('/api/state')
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data.success) return;
-        var s = data.data;
-        var ss = s.system_state || {};
+      // Update vital stats
+      var packetsEl = document.getElementById('vital-packets');
+      var turnsEl = document.getElementById('vital-turns');
+      var coherenceEl = document.getElementById('vital-coherence');
 
-        // Packet count: use array length
-        var el = document.getElementById('vital-packets');
-        if (el) el.textContent = (s.packets && s.packets.length) || '0';
-
-        // Turn count from system_state
-        var turnsEl = document.getElementById('vital-turns');
-        if (turnsEl) turnsEl.textContent = ss.total_dialogue_turns || '0';
-
-        // Coherence percentage
-        var cohEl = document.getElementById('vital-coherence');
-        if (cohEl && ss.avg_coherence) {
-          var pct = Math.round(parseFloat(ss.avg_coherence) * 100);
-          cohEl.textContent = pct + '%';
-        }
-
-        // RSS count from rss_stats
-        var rssEl = document.getElementById('vital-rss');
-        if (rssEl && s.rss_stats && s.rss_stats.total) rssEl.textContent = s.rss_stats.total;
-      })
-      .catch(function () { /* silent */ });
-  }, 10000);
-
-  // ── Enter key submits inbox ──
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      var input = document.getElementById('inbox-input');
-      if (input && document.activeElement === input) {
-        e.preventDefault();
-        window.submitInbox();
+      if (packetsEl) packetsEl.textContent = (s.packets && s.packets.length) || s.total_interactions || '0';
+      if (turnsEl) turnsEl.textContent = s.dialogue_turns || '0';
+      if (coherenceEl && s.system_state && s.system_state.avg_coherence) {
+        coherenceEl.textContent = Math.round(parseFloat(s.system_state.avg_coherence) * 100) + '%';
       }
+
+      // Update inbox badge
+      var inboxBadge = document.querySelector('.inbox-badge');
+      if (inboxBadge && s.pending_inbox) {
+        inboxBadge.textContent = s.pending_inbox;
+      }
+    } catch (err) {
+      // Silent fail on poll
     }
-  });
+  }
+
+  // ── Init ──
+
+  // Start polling after initial render
+  if (document.readyState === 'complete') {
+    startPolling();
+  } else {
+    window.addEventListener('load', startPolling);
+  }
 
 })();
