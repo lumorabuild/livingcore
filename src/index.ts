@@ -1,13 +1,10 @@
 // Living Core — Main Worker Entry
-// A lightweight, self-evolving cognitive architecture
-// 
-// Two agents, Kevin and Jenny, share one living memory system
-// and learn by rewriting their own memory representations over time.
-//
-// This is the main entry point for the Cloudflare Worker.
+// A tiny artificial mind — two agents, Kevin & Jenny, learning by rewriting memory.
+// Phase 0: Living Dialogue — continuous conversation, Idea Inbox, public archive.
 
 import { Hono } from 'hono';
 import api from './routes/api';
+import * as dialogueEngine from './core/dialogue';
 
 type Bindings = {
   DB: D1Database;
@@ -18,25 +15,33 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 // Health check
 app.get('/health', (c) => {
-  return c.json({ 
-    status: 'alive', 
+  return c.json({
+    status: 'alive',
     name: 'Living Core',
-    version: '1.0.0',
+    version: '2.0.0',
     agents: ['Kevin (The Grounder)', 'Jenny (The Weaver)'],
-    tagline: 'A tiny artificial mind made of two collaborating agents'
+    tagline: 'A living thought garden — two agents in continuous dialogue'
+  });
+});
+
+// Cron trigger — safety net every 20 minutes
+app.get('/__cron', async (c) => {
+  const result = await dialogueEngine.generateStandaloneThought(c.env.DB);
+  return c.json({
+    success: true,
+    thought_generated: result !== null,
+    turn: result?.turn_number || null
   });
 });
 
 // API routes
 app.route('/api', api);
 
-// Serve frontend (SPA — fallback to index.html for any non-API route)
+// Serve frontend (SPA fallback)
 app.all('*', async (c) => {
-  // For the root and frontend routes, serve the SPA
   try {
     const response = await c.env.ASSETS.fetch(c.req.raw);
     if (response.status === 404) {
-      // Fallback to index.html for SPA routing
       return c.env.ASSETS.fetch(new Request('https://placeholder/index.html'));
     }
     return response;

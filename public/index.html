@@ -1,759 +1,523 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Living Core — A tiny artificial mind made of two collaborating agents">
-  <title>Living Core</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            core: {
-              bg: '#0f0f1a', surface: '#1a1a2e', card: '#16213e',
-              border: '#2a2a4a', accent: '#6c63ff', 'accent-light': '#8b83ff',
-              kevin: '#4ecdc4', jenny: '#ff6b9d', gold: '#ffd700',
-              text: '#e0e0f0', 'text-dim': '#8888aa'
-            }
-          },
-          fontFamily: {
-            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-            sans: ['Inter', 'system-ui', 'sans-serif']
-          },
-          animation: {
-            'pulse-slow': 'pulse 3s ease-in-out infinite',
-            'fade-in': 'fadeIn 0.5s ease-out',
-            'slide-up': 'slideUp 0.3s ease-out',
-            'glow': 'glow 2s ease-in-out infinite alternate',
-            'in': 'in 0.3s ease-out'
-          },
-          keyframes: {
-            fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-            slideUp: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-            glow: { '0%': { boxShadow: '0 0 5px rgba(108,99,255,0.2)' }, '100%': { boxShadow: '0 0 20px rgba(108,99,255,0.4)' } },
-            in: { '0%': { opacity: '0', transform: 'translateY(5px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } }
-          }
-        }
-      }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Living Core — Two agents, Kevin & Jenny, thinking together in public">
+<title>Living Core — a living thought garden</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        x: { bg: '#0f1419', card: '#1a1f2e', surface: '#1d2939', border: '#2f3336', text: '#e7e9ea', dim: '#71767b', input: '#202327', blue: '#1d9bf0' },
+        kevin: '#4ecdc4', jenny: '#ff6b9d', gold: '#e2b714'
+      },
+      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'Fira Code', 'monospace'] }
     }
-  </script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-    body { background: #0f0f1a; }
-    .scrollbar-thin::-webkit-scrollbar { width: 4px; }
-    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-    .scrollbar-thin::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 2px; }
-    .packet-card { transition: all 0.2s ease; }
-    .packet-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(108,99,255,0.15); }
-    .typing-indicator::after { content: '|'; animation: blink 1s step-end infinite; }
-    @keyframes blink { 50% { opacity: 0; } }
-    .thought-line { opacity: 0; animation: fadeIn 0.4s ease-out forwards; }
-    .thought-line:nth-child(1) { animation-delay: 0.1s; }
-    .thought-line:nth-child(2) { animation-delay: 0.25s; }
-    .thought-line:nth-child(3) { animation-delay: 0.4s; }
-    .thought-line:nth-child(4) { animation-delay: 0.55s; }
-    .thought-line:nth-child(5) { animation-delay: 0.7s; }
-    .thought-line:nth-child(6) { animation-delay: 0.85s; }
-    .vital-card { border: 1px solid #2a2a4a; border-radius: 12px; padding: 1rem; background: #1a1a2e; }
-    .kevin-glow { box-shadow: 0 0 15px rgba(78, 205, 196, 0.1); }
-    .jenny-glow { box-shadow: 0 0 15px rgba(255, 107, 157, 0.1); }
-    .message-input {
-      background: #1a1a2e; border: 1px solid #2a2a4a; color: #e0e0f0;
-      border-radius: 14px; padding: 1.25rem; width: 100%;
-      font-family: 'Inter', sans-serif; font-size: 1.1rem;
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-    .message-input:focus { outline: none; border-color: #6c63ff; box-shadow: 0 0 0 4px rgba(108,99,255,0.12); }
-    .message-input::placeholder { color: #444466; }
-    .btn-primary {
-      background: linear-gradient(135deg, #6c63ff, #8b83ff); color: white;
-      border: none; border-radius: 14px; padding: 1rem 2rem;
-      font-weight: 600; font-size: 1.05rem; cursor: pointer;
-      transition: all 0.2s; white-space: nowrap;
-    }
-    .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 25px rgba(108,99,255,0.35); }
-    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-    .btn-suggestion {
-      background: transparent; border: 1px solid #2a2a4a; color: #8888aa;
-      border-radius: 20px; padding: 0.4rem 1rem; font-size: 0.8rem;
-      cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif;
-    }
-    .btn-suggestion:hover { border-color: #6c63ff; color: #e0e0f0; background: rgba(108,99,255,0.08); }
-    .type-badge {
-      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
-      font-size: 0.7rem; font-weight: 500;
-      font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em;
-    }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-  </style>
+  }
+}
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+* { box-sizing: border-box; }
+body { background: #0f1419; color: #e7e9ea; font-family: 'Inter', system-ui, sans-serif; margin: 0; }
+.scrollbar-thin::-webkit-scrollbar { width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #2f3336; border-radius: 2px; }
+
+/* Typing animation */
+@keyframes typeIn {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes cursorBlink { 50% { opacity: 0; } }
+.typing-cursor::after { content: '|'; color: #1d9bf0; animation: cursorBlink 0.7s step-end infinite; margin-left: 2px; }
+.dialogue-turn { animation: typeIn 0.4s ease-out both; }
+.dialogue-turn:nth-child(1) { animation-delay: 0.1s; }
+.dialogue-turn:nth-child(2) { animation-delay: 0.3s; }
+.dialogue-turn:nth-child(3) { animation-delay: 0.5s; }
+
+/* Glow accents */
+.kevin-badge { color: #4ecdc4; text-shadow: 0 0 12px rgba(78,205,196,0.2); }
+.jenny-badge { color: #ff6b9d; text-shadow: 0 0 12px rgba(255,107,157,0.2); }
+.card-hover { transition: border-color 0.2s; }
+.card-hover:hover { border-color: #1d9bf0; }
+
+/* Fade-in */
+@keyframes fadeUp { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+.fade-up { animation: fadeUp 0.4s ease-out both; }
+
+/* Invisible scrollbar container */
+.dialogue-scroll { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2f3336 transparent; }
+
+/* Thought highlight */
+.thought-prefix { color: #71767b; font-size: 12px; }
+</style>
 </head>
-<body class="text-[#e0e0f0] font-sans min-h-screen">
-  <div class="max-w-7xl mx-auto px-4 py-6">
+<body>
 
-    <!-- ===== HERO HEADER ===== -->
-    <div class="text-center mb-8">
-      <h1 class="text-4xl sm:text-5xl font-bold tracking-tight mb-2">
-        <span class="bg-gradient-to-r from-[#6c63ff] via-[#8b83ff] to-[#4ecdc4] bg-clip-text text-transparent">Living Core</span>
-      </h1>
-      <p class="text-[#8888aa] text-base max-w-xl mx-auto">
-        A tiny artificial mind — Kevin &amp; Jenny — learning by rewriting their own memory.
-        <span class="block text-sm mt-1 text-[#555577]">No AI models. No neural nets. Just pure symbolic emergence.</span>
-      </p>
-      <div class="flex items-center justify-center gap-4 mt-3">
-        <span class="text-xs font-mono flex items-center gap-1.5">
-          <span class="status-dot bg-[#4ecdc4]" id="status-dot"></span>
-          <span id="status-indicator">connecting...</span>
-        </span>
-        <span class="text-[#2a2a4a]">|</span>
-        <span class="text-xs font-mono text-[#555577]">v1.0</span>
-        <span class="text-[#2a2a4a]">|</span>
-        <button onclick="resetSystem()" class="text-xs text-[#555577] hover:text-red-400 transition-colors font-mono">reset</button>
-      </div>
+<div id="app" class="max-w-2xl mx-auto px-4 py-4 min-h-screen">
+  <!-- Header -->
+  <header class="flex items-center justify-between mb-5 border-b border-[#2f3336] pb-3">
+    <div>
+      <h1 class="text-xl font-bold tracking-tight">Living Core</h1>
+      <p class="text-xs text-[#71767b] mt-0.5">Kevin & Jenny — thinking together, in public</p>
     </div>
-
-    <!-- ===== VITAL SIGNS ===== -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 mb-6" id="vitals">
-      <div class="vital-card text-center"><div class="text-[#8888aa] text-[10px] font-mono mb-0.5 uppercase tracking-wider">Packets</div><div class="text-2xl font-bold" id="stat-packets">0</div></div>
-      <div class="vital-card text-center"><div class="text-[#8888aa] text-[10px] font-mono mb-0.5 uppercase tracking-wider">Connections</div><div class="text-2xl font-bold" id="stat-connections">0</div></div>
-      <div class="vital-card text-center"><div class="text-[#8888aa] text-[10px] font-mono mb-0.5 uppercase tracking-wider">Interactions</div><div class="text-2xl font-bold" id="stat-interactions">0</div></div>
-      <div class="vital-card text-center"><div class="text-[#8888aa] text-[10px] font-mono mb-0.5 uppercase tracking-wider">Rewrites</div><div class="text-2xl font-bold" id="stat-rewrites">0</div></div>
-      <div class="vital-card text-center"><div class="text-[#8888aa] text-[10px] font-mono mb-0.5 uppercase tracking-wider">Coherence</div><div class="text-2xl font-bold" id="stat-coherence">0%</div></div>
-      <div class="vital-card text-center"><div class="text-[#8888aa] text-[10px] font-mono mb-0.5 uppercase tracking-wider">Concepts</div><div class="text-2xl font-bold" id="stat-concepts">0</div></div>
-      <div class="vital-card text-center"><div class="text-[#8888aa] text-[10px] font-mono mb-0.5 uppercase tracking-wider">Born</div><div class="text-lg font-bold truncate" id="stat-born">—</div></div>
+    <div class="flex items-center gap-3 text-xs text-[#71767b]">
+      <span id="vital-packets" class="font-medium text-[#e7e9ea]">0</span> packets
+      <span class="text-[#2f3336]">·</span>
+      <span id="vital-turns" class="font-medium text-[#e7e9ea]">0</span> turns
+      <span class="text-[#2f3336]">·</span>
+      <span id="vital-coherence" class="font-medium text-[#e7e9ea]">0%</span>
     </div>
+  </header>
 
-    <!-- ===== INPUT AREA ===== -->
-    <div class="mb-8 animate-fade-in">
-      <form id="input-form" class="flex flex-col sm:flex-row gap-3">
-        <div class="flex-1 relative">
-          <input type="text" id="message-input" class="message-input"
-                 placeholder="Share an experience with the system..."
-                 autocomplete="off">
-          <div id="input-counter" class="absolute right-4 bottom-3 text-[10px] text-[#444466] font-mono"></div>
-        </div>
-        <button type="submit" class="btn-primary" id="submit-btn">
-          <span class="flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>
-            Feed Experience
-          </span>
-        </button>
-      </form>
-      <!-- Suggestions -->
-      <div class="flex flex-wrap gap-2 mt-3 justify-center" id="suggestions">
-        <button class="btn-suggestion" data-text="I just learned that the sky is blue because of how sunlight scatters in the atmosphere.">Try: "The sky is blue because..."</button>
-        <button class="btn-suggestion" data-text="Kevin is very careful and methodical. He always checks his work twice before sharing it with others.">Try: "Kevin is careful..."</button>
-        <button class="btn-suggestion" data-text="I noticed that cats and dogs both make great pets but they have very different personalities and needs.">Try: "Cats vs dogs..."</button>
-      </div>
+  <!-- Idea Inbox -->
+  <div class="mb-6 bg-[#1a1f2e] rounded-2xl border border-[#2f3336] p-4 card-hover">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-sm font-medium">💭 Drop an idea</span>
+      <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-2 py-0.5 rounded-full">anyone can contribute</span>
     </div>
-
-    <!-- ===== PROCESSING RESULT BANNER ===== -->
-    <div id="result-banner" class="hidden mb-6 p-4 rounded-xl bg-[#1a1a2e] border border-[#4ecdc4]/20 text-sm animate-slide-up">
-      <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-[#8888aa]">
-        <span id="result-rewrites" class="text-[#4ecdc4] font-mono">0 rewrites</span>
-        <span class="text-[#2a2a4a] hidden sm:inline">|</span>
-        <span id="result-new" class="text-[#8b83ff] font-mono">0 new packets</span>
-        <span class="text-[#2a2a4a] hidden sm:inline">|</span>
-        <span id="result-coherence" class="font-mono">coherence: 0% → 0%</span>
-        <span class="text-[#2a2a4a] hidden sm:inline">|</span>
-        <span id="result-think-time" class="font-mono text-[#555577]"></span>
+    <textarea id="inbox-input" rows="2"
+      class="w-full bg-[#202327] border border-[#2f3336] rounded-xl p-3 text-sm text-[#e7e9ea] resize-none outline-none focus:border-[#1d9bf0] transition-colors placeholder:text-[#71767b]"
+      placeholder="Share a thought, question, or idea..."></textarea>
+    <div class="flex items-center justify-between mt-3">
+      <div class="flex gap-2 text-xs">
+        <button onclick="suggestThought('What if machines could dream?')"
+          class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336]">💡 Dream?</button>
+        <button onclick="suggestThought('The universe is a thought.')"
+          class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336]">🌌 Universe</button>
+        <button onclick="suggestThought('What is beauty?')"
+          class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336]">✨ Beauty</button>
       </div>
+      <button id="inbox-submit" onclick="submitInbox()"
+        class="bg-[#1d9bf0] hover:bg-[#1a8cd8] text-white text-sm font-medium px-5 py-2 rounded-full transition-colors disabled:opacity-40">
+        Drop Idea
+      </button>
     </div>
-
-    <!-- ===== AGENTS PANEL ===== -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6" id="agents-panel">
-
-      <!-- Kevin -->
-      <div class="bg-[#1a1a2e] border border-[#2a2a4a] rounded-xl p-4 kevin-glow">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="w-3 h-3 rounded-full bg-[#4ecdc4]"></span>
-          <h2 class="font-semibold text-lg">Kevin</h2>
-          <span class="text-xs text-[#8888aa] font-mono hidden sm:inline">— The Grounder</span>
-          <span class="ml-auto text-[10px] text-[#555577] font-mono" id="kevin-badge">inactive</span>
-        </div>
-        <div class="text-[#555577] text-xs font-mono mb-2">precise · consistent · detail-oriented</div>
-        <div id="kevin-thoughts" class="text-sm leading-relaxed min-h-[100px] max-h-[280px] overflow-y-auto scrollbar-thin p-3 rounded-lg bg-[#0f0f1a]/50">
-          <span class="text-[#555577] italic">Awaiting experience...</span>
-        </div>
-      </div>
-
-      <!-- Jenny -->
-      <div class="bg-[#1a1a2e] border border-[#2a2a4a] rounded-xl p-4 jenny-glow">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="w-3 h-3 rounded-full bg-[#ff6b9d]"></span>
-          <h2 class="font-semibold text-lg">Jenny</h2>
-          <span class="text-xs text-[#8888aa] font-mono hidden sm:inline">— The Weaver</span>
-          <span class="ml-auto text-[10px] text-[#555577] font-mono" id="jenny-badge">inactive</span>
-        </div>
-        <div class="text-[#555577] text-xs font-mono mb-2">exploratory · connective · abstract</div>
-        <div id="jenny-thoughts" class="text-sm leading-relaxed min-h-[100px] max-h-[280px] overflow-y-auto scrollbar-thin p-3 rounded-lg bg-[#0f0f1a]/50">
-          <span class="text-[#555577] italic">Awaiting experience...</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== TABS ===== -->
-    <div class="mb-2">
-      <div class="flex gap-0.5 overflow-x-auto">
-        <button onclick="switchTab('memory')" id="tab-memory" class="tab-btn px-4 py-2.5 text-sm rounded-t-lg bg-[#1a1a2e] border border-[#2a2a4a] border-b-0 text-[#e0e0f0] font-medium whitespace-nowrap">🧠 Memory</button>
-        <button onclick="switchTab('concepts')" id="tab-concepts" class="tab-btn px-4 py-2.5 text-sm rounded-t-lg bg-[#16213e] border border-[#2a2a4a] border-b-0 text-[#8888aa] whitespace-nowrap">💡 Concepts <span id="concept-count-badge" class="ml-1 text-[10px] bg-[#2a2a4a] px-1.5 py-0.5 rounded-full">0</span></button>
-        <button onclick="switchTab('log')" id="tab-log" class="tab-btn px-4 py-2.5 text-sm rounded-t-lg bg-[#16213e] border border-[#2a2a4a] border-b-0 text-[#8888aa] whitespace-nowrap">📜 Activity Log</button>
-        <button onclick="switchTab('graph')" id="tab-graph" class="tab-btn px-4 py-2.5 text-sm rounded-t-lg bg-[#16213e] border border-[#2a2a4a] border-b-0 text-[#8888aa] whitespace-nowrap">🔗 Graph</button>
-        <button onclick="switchTab('respond')" id="tab-respond" class="tab-btn px-4 py-2.5 text-sm rounded-t-lg bg-[#16213e] border border-[#2a2a4a] border-b-0 text-[#8888aa] whitespace-nowrap">💬 Ask</button>
-      </div>
-    </div>
-
-    <!-- ===== TAB CONTENT ===== -->
-    <div class="bg-[#1a1a2e] border border-[#2a2a4a] rounded-b-xl rounded-tr-xl p-4 min-h-[300px]">
-
-      <!-- Memory -->
-      <div id="content-memory" class="tab-content">
-        <div class="text-[#8888aa] text-xs font-mono mb-3 flex items-center justify-between">
-          <span id="packet-count-display">0 packets</span>
-          <span class="text-[10px] text-[#555577]">Click a packet to see its connections</span>
-        </div>
-        <div id="packets-list" class="space-y-2 max-h-[550px] overflow-y-auto scrollbar-thin pr-1">
-          <div class="text-[#555577] italic text-sm text-center py-8">
-            No memories yet. Share an experience above to begin.
-          </div>
-        </div>
-      </div>
-
-      <!-- Concepts -->
-      <div id="content-concepts" class="tab-content hidden">
-        <div class="text-[#8888aa] text-xs font-mono mb-3">Emerging higher-level abstractions</div>
-        <div id="concepts-list" class="space-y-2 max-h-[550px] overflow-y-auto scrollbar-thin pr-1">
-          <div class="text-[#555577] italic text-sm text-center py-8">
-            No concepts have emerged yet. Keep sharing experiences — abstractions form naturally over time.
-          </div>
-        </div>
-      </div>
-
-      <!-- Log -->
-      <div id="content-log" class="tab-content hidden">
-        <div class="text-[#8888aa] text-xs font-mono mb-3">Every thinking step, in order</div>
-        <div id="log-list" class="space-y-0.5 max-h-[550px] overflow-y-auto scrollbar-thin pr-1">
-          <div class="text-[#555577] italic text-sm text-center py-8">No activity yet.</div>
-        </div>
-      </div>
-
-      <!-- Graph -->
-      <div id="content-graph" class="tab-content hidden">
-        <div class="text-[#8888aa] text-xs font-mono mb-3">Connection graph</div>
-        <div id="graph-view" class="max-h-[550px] overflow-y-auto scrollbar-thin pr-1">
-          <div class="text-[#555577] italic text-sm text-center py-8">Share experiences to build the connection graph.</div>
-        </div>
-      </div>
-
-      <!-- Respond -->
-      <div id="content-respond" class="tab-content hidden">
-        <div class="text-[#8888aa] text-xs font-mono mb-3">Ask the system a question based on its memory</div>
-        <div class="flex gap-2 mb-3">
-          <input type="text" id="ask-input" class="message-input !py-2.5 !text-sm" placeholder="What does the system know about...">
-          <button onclick="askSystem()" class="btn-primary !py-2.5 !px-4 !text-sm whitespace-nowrap">Ask</button>
-        </div>
-        <div id="ask-response" class="text-sm leading-relaxed p-3 rounded-lg bg-[#0f0f1a]/50 min-h-[80px] max-h-[400px] overflow-y-auto scrollbar-thin">
-          <span class="text-[#555577] italic">Type a question and press Ask.</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="mt-10 text-center text-xs text-[#555577] font-mono">
-      built with ♥ on Cloudflare Workers · <a href="https://github.com/lumorabuild/livingcore" class="hover:text-[#8888aa] underline underline-offset-2">github</a>
-    </footer>
+    <div id="inbox-feedback" class="hidden mt-2 text-xs text-[#4ecdc4] fade-up"></div>
   </div>
 
-  <script>
-    // ============================================================
-    // STATE
-    // ============================================================
-    let currentTab = 'memory';
-    let pollInterval = null;
-    let isProcessing = false;
-    let lastThinking = { kevin: null, jenny: null };
+  <!-- Tab bar -->
+  <div class="flex border-b border-[#2f3336] mb-4 gap-0">
+    <button onclick="switchTab('dialogue')" id="tab-dialogue" class="flex-1 text-center py-3 text-sm font-medium border-b-2 border-[#1d9bf0] text-[#e7e9ea] transition-colors">💬 Dialogue</button>
+    <button onclick="switchTab('memory')" id="tab-memory" class="flex-1 text-center py-3 text-sm font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea] transition-colors">🧠 Memory</button>
+    <button onclick="switchTab('archive')" id="tab-archive" class="flex-1 text-center py-3 text-sm font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea] transition-colors">📜 Archive</button>
+    <button onclick="switchTab('best')" id="tab-best" class="flex-1 text-center py-3 text-sm font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea] transition-colors">⭐ Best Ideas</button>
+  </div>
 
-    // ============================================================
-    // INIT
-    // ============================================================
-    document.addEventListener('DOMContentLoaded', () => {
-      loadState();
-      pollInterval = setInterval(pollState, 4000);
-    });
+  <!-- ─── DIALOGUE TAB ─── -->
+  <div id="panel-dialogue" class="block">
+    <div id="dialogue-container" class="dialogue-scroll space-y-3 min-h-[300px] max-h-[600px] pr-1">
+      <div class="text-center py-12 text-[#71767b] text-sm">
+        <div class="mb-2">🌱 Waiting for Kevin & Jenny to start thinking...</div>
+        <button onclick="triggerThink()" class="text-[#1d9bf0] hover:underline text-xs">Trigger a thought</button>
+      </div>
+    </div>
+  </div>
 
-    // ---- Suggestion buttons ----
-    document.querySelectorAll('.btn-suggestion').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.getElementById('message-input').value = btn.dataset.text;
-        document.getElementById('message-input').focus();
-        document.getElementById('input-counter').textContent = `${btn.dataset.text.length} chars`;
-      });
-    });
+  <!-- ─── MEMORY TAB ─── -->
+  <div id="panel-memory" class="hidden">
+    <div id="memory-container" class="space-y-2">
+      <div class="text-center py-8 text-[#71767b] text-sm">Loading memory...</div>
+    </div>
+  </div>
 
-    document.getElementById('message-input').addEventListener('input', function() {
-      const c = this.value.length;
-      document.getElementById('input-counter').textContent = c > 0 ? `${c} chars` : '';
-    });
+  <!-- ─── ARCHIVE TAB ─── -->
+  <div id="panel-archive" class="hidden">
+    <div id="archive-container" class="space-y-2">
+      <div class="text-center py-8 text-[#71767b] text-sm">Loading archive...</div>
+    </div>
+  </div>
 
-    // ---- Submit ----
-    document.getElementById('input-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const input = document.getElementById('message-input');
-      const content = input.value.trim();
-      if (!content || isProcessing) return;
+  <!-- ─── BEST IDEAS TAB ─── -->
+  <div id="panel-best" class="hidden">
+    <div id="best-container" class="space-y-2">
+      <div class="text-center py-8 text-[#71767b] text-sm">Loading best ideas...</div>
+    </div>
+  </div>
+</div>
 
-      const startTime = Date.now();
-      isProcessing = true;
-      const btn = document.getElementById('submit-btn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="flex items-center gap-2"><svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Thinking...</span>';
+<script>
+// ── State ──
+let allDialogueTurns = [];
+let allPackets = [];
+let allIdeas = [];
+let allLogs = [];
+let isSubmitting = false;
+let isThinking = false;
+let typingQueue = [];
+let isTyping = false;
 
-      // Show processing state
-      document.getElementById('kevin-thoughts').innerHTML = '<span class="text-[#4ecdc4]">⏳ Processing...</span><span class="typing-indicator"></span>';
-      document.getElementById('jenny-thoughts').innerHTML = '<span class="text-[#ff6b9d]">⏳ Processing...</span><span class="typing-indicator"></span>';
-      document.getElementById('kevin-badge').textContent = 'thinking...';
-      document.getElementById('jenny-badge').textContent = 'thinking...';
-      document.getElementById('result-banner').classList.add('hidden');
+// ── Tab Switching ──
+function switchTab(name) {
+  ['dialogue','memory','archive','best'].forEach(t => {
+    document.getElementById(`panel-${t}`).className = t === name ? 'block fade-up' : 'hidden';
+    const btn = document.getElementById(`tab-${t}`);
+    btn.className = t === name
+      ? 'flex-1 text-center py-3 text-sm font-medium border-b-2 border-[#1d9bf0] text-[#e7e9ea] transition-colors'
+      : 'flex-1 text-center py-3 text-sm font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea] transition-colors';
+  });
+  if (name === 'memory') loadMemoryTab();
+  if (name === 'archive') loadArchiveTab();
+  if (name === 'best') loadBestTab();
+}
 
-      try {
-        const res = await fetch('/api/input', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content })
-        });
-        const json = await res.json();
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+// ── Global State Loader ──
+async function loadState() {
+  try {
+    const res = await fetch('/api/state');
+    const json = await res.json();
+    if (!json.success) return;
+    const d = json.data;
 
-        if (json.success) {
-          displayAgentResponses(json.data);
-          document.getElementById('kevin-badge').textContent = 'active';
-          document.getElementById('jenny-badge').textContent = 'active';
-          document.getElementById('result-banner').classList.remove('hidden');
-          document.getElementById('result-rewrites').textContent = `✏️ ${json.data.applied_rewrites} rewrite${json.data.applied_rewrites !== 1 ? 's' : ''}`;
-          document.getElementById('result-new').textContent = `📦 ${json.data.new_packets_added} new packet${json.data.new_packets_added !== 1 ? 's' : ''}`;
-          document.getElementById('result-coherence').textContent = json.data.coherence_before > 0
-            ? `☯ ${(json.data.coherence_before * 100).toFixed(1)}% → ${(json.data.coherence_after * 100).toFixed(1)}%`
-            : `☯ ${(json.data.coherence_after * 100).toFixed(1)}%`;
-          document.getElementById('result-think-time').textContent = `⚡ ${elapsed}s`;
-          input.value = '';
-          document.getElementById('input-counter').textContent = '';
-          await loadState();
-        }
-      } catch (err) {
-        document.getElementById('kevin-thoughts').innerHTML = `<span class="text-red-400">✕ Error: ${err.message}</span>`;
-        document.getElementById('jenny-thoughts').innerHTML = `<span class="text-red-400">✕ Error: ${err.message}</span>`;
-      }
+    // Vitals
+    document.getElementById('vital-packets').textContent = d.packets?.length || 0;
+    document.getElementById('vital-turns').textContent = d.dialogue_turns || 0;
+    document.getElementById('vital-coherence').textContent = d.system_state?.avg_coherence
+      ? (parseFloat(d.system_state.avg_coherence) * 100).toFixed(0) + '%'
+      : '0%';
 
-      isProcessing = false;
-      btn.disabled = false;
-      btn.innerHTML = '<span class="flex items-center gap-2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg> Feed Experience</span>';
-    });
+    allPackets = d.packets || [];
+    allLogs = d.recent_log || [];
 
-    // ============================================================
-    // CORE FUNCTIONS
-    // ============================================================
+    // Load dialogue
+    loadDialogue();
+  } catch (e) {
+    console.error('State load error:', e);
+  }
+}
 
-    function displayAgentResponses(data) {
-      // Kevin
-      const kThoughts = data.kevin_response?.thoughts?.split('\n').filter(l => l.trim()) || ['No response.'];
-      document.getElementById('kevin-thoughts').innerHTML = kThoughts.map(l =>
-        `<div class="thought-line ${l.startsWith('Extracted') || l.startsWith('Found') || l.startsWith('Analyzing') ? 'text-[#4ecdc4]' : ''}">${l}</div>`
-      ).join('');
-      lastThinking.kevin = kThoughts;
+// ── Dialogue Loader ──
+async function loadDialogue() {
+  try {
+    const res = await fetch('/api/dialogue?limit=100');
+    const json = await res.json();
+    if (!json.success) return;
+    allDialogueTurns = json.data || [];
 
-      // Jenny
-      const jThoughts = data.jenny_response?.thoughts?.split('\n').filter(l => l.trim()) || ['No response.'];
-      document.getElementById('jenny-thoughts').innerHTML = jThoughts.map(l =>
-        `<div class="thought-line ${l.startsWith('Exploring') || l.startsWith('Found') || l.startsWith('Noticing') || l.startsWith('Potential') || l.startsWith('Memory') ? 'text-[#ff6b9d]' : ''}">${l}</div>`
-      ).join('');
-      lastThinking.jenny = jThoughts;
+    // Load any pending thoughts from agent_log that haven't been turned into dialogue turns yet
+    if (allDialogueTurns.length === 0) {
+      tryRestoreFromLogs();
     }
 
-    async function loadState() {
-      setStatus('loading...', '#ffd700');
-      try {
-        const res = await fetch('/api/state');
-        const json = await res.json();
-        if (!json.success) { setStatus('error', '#ff6b6b'); return; }
+    renderDialogue();
+  } catch (e) {
+    console.error('Dialogue load error:', e);
+  }
+}
 
-        const { packets, connections, recent_log, system_state } = json.data;
+function tryRestoreFromLogs() {
+  const kevinLogs = allLogs.filter(l => l.agent === 'kevin' && l.action === 'analyze' && l.detail);
+  const jennyLogs = allLogs.filter(l => l.agent === 'jenny' && l.action === 'analyze' && l.detail);
+  if (kevinLogs.length === 0 && jennyLogs.length === 0) return;
 
-        // Stats
-        document.getElementById('stat-packets').textContent = packets.length;
-        document.getElementById('stat-connections').textContent = connections.length;
-        document.getElementById('stat-interactions').textContent = system_state.total_interactions || '0';
-        document.getElementById('stat-rewrites').textContent = system_state.total_rewrites || '0';
-        document.getElementById('stat-coherence').textContent = (parseFloat(system_state.avg_coherence || '0') * 100).toFixed(1) + '%';
-        document.getElementById('stat-concepts').textContent = system_state.concept_count || '0';
-        document.getElementById('stat-born').textContent = system_state.born_at ? new Date(system_state.born_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  const container = document.getElementById('dialogue-container');
+  container.innerHTML = `
+    <div class="text-center py-4 text-xs text-[#71767b]">📜 Restoring from system logs...</div>
+  `;
+}
 
-        // Concept badge
-        document.getElementById('concept-count-badge').textContent = system_state.concept_count || '0';
+// ── Render Dialogue ──
+function renderDialogue() {
+  const container = document.getElementById('dialogue-container');
+  if (allDialogueTurns.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-12 text-[#71767b] text-sm">
+        <div class="mb-2">🌱 Drop an idea above to start the conversation</div>
+        <button onclick="triggerThink()" class="text-[#1d9bf0] hover:underline text-xs">Or trigger Kevin & Jenny manually</button>
+      </div>
+    `;
+    return;
+  }
 
-        // Tabs
-        renderPackets(packets, connections);
-        renderConcepts(packets);
-        renderLog(recent_log);
-        renderGraph(packets, connections);
-        renderPacketCount(packets.length);
+  let html = '';
+  allDialogueTurns.forEach((turn, i) => {
+    const isKevin = turn.speaker === 'kevin';
+    const name = isKevin ? 'Kevin' : 'Jenny';
+    const role = isKevin ? 'The Grounder' : 'The Weaver';
+    const color = isKevin ? 'kevin-badge' : 'jenny-badge';
+    const borderColor = isKevin ? 'border-l-[#4ecdc4]' : 'border-l-[#ff6b9d]';
+    const time = formatTime(turn.created_at);
 
-        // --- Agent panels from logs ---
-        restoreAgentThoughts(recent_log);
-
-        setStatus('live', '#4ecdc4');
-      } catch (err) {
-        setStatus('error', '#ff6b6b');
-      }
-    }
-
-    /** Restore Kevin & Jenny thought panels from recent agent_log entries */
-    function restoreAgentThoughts(logs) {
-      // Find the most recent ANALYZE entry for each agent with thoughts
-      const kevinLogs = logs ? logs.filter(l => l.agent === 'kevin' && l.action === 'analyze' && l.detail) : [];
-      const jennyLogs = logs ? logs.filter(l => l.agent === 'jenny' && l.action === 'analyze' && l.detail) : [];
-
-      function renderAgentThought(containerId, badgeId, agentLogs, colorClass, highlightPrefixes) {
-        const packetCount = parseInt(document.getElementById('stat-packets').textContent) || 0;
-        if (agentLogs.length === 0) {
-          if (packetCount > 0) {
-            document.getElementById(containerId).innerHTML =
-              `<div class="text-[#8888aa]">System has ${packetCount} memories stored.</div>` +
-              `<div class="text-[#555577] text-xs mt-1">Share a new experience to see thoughts.</div>`;
-            document.getElementById(badgeId).textContent = 'ready';
-          }
-          return;
-        }
-        const lastEntry = agentLogs[agentLogs.length - 1];
-        try {
-          const detail = JSON.parse(lastEntry.detail);
-          if (detail.thoughts) {
-            const lines = detail.thoughts.split('\n').filter(l => l.trim());
-            document.getElementById(containerId).innerHTML = lines.map(l => {
-              const highlighted = highlightPrefixes.some(p => l.startsWith(p));
-              return `<div class="${highlighted ? colorClass : ''}">${l}</div>`;
-            }).join('');
-            document.getElementById(badgeId).textContent = 'last session';
-            lastThinking[containerId === 'kevin-thoughts' ? 'kevin' : 'jenny'] = lines;
-          }
-        } catch {}
-      }
-
-      renderAgentThought('kevin-thoughts', 'kevin-badge', kevinLogs, 'text-[#4ecdc4]', ['Extracted', 'Found', 'Analyzing']);
-      renderAgentThought('jenny-thoughts', 'jenny-badge', jennyLogs, 'text-[#ff6b9d]', ['Exploring', 'Found', 'Noticing', 'Potential', 'Memory']);
-    }
-
-    async function pollState() {
-      try {
-        const res = await fetch('/api/stats');
-        const json = await res.json();
-        if (!json.success) return;
-        const s = json.data;
-
-        document.getElementById('stat-packets').textContent = s.total_packets;
-        document.getElementById('stat-connections').textContent = s.total_connections;
-        document.getElementById('stat-interactions').textContent = s.total_interactions;
-        document.getElementById('stat-rewrites').textContent = s.total_rewrites;
-        document.getElementById('stat-coherence').textContent = (s.avg_coherence * 100).toFixed(1) + '%';
-        document.getElementById('stat-concepts').textContent = s.concept_count;
-        document.getElementById('concept-count-badge').textContent = s.concept_count;
-
-        // Full refresh every 3 polls (~12s)
-        if (Math.floor(Math.random() * 3) === 0) {
-          await loadState();
-        } else if (currentTab === 'log') {
-          fetch('/api/log').then(r => r.json()).then(j => { if (j.success) renderLog(j.data); });
-        }
-      } catch {}
-    }
-
-    function setStatus(text, color) {
-      document.getElementById('status-indicator').textContent = text;
-      document.getElementById('status-dot').style.background = color;
-    }
-
-    // ============================================================
-    // TAB RENDERERS
-    // ============================================================
-
-    function renderPackets(packets, connections) {
-      const container = document.getElementById('packets-list');
-      if (packets.length === 0) {
-        container.innerHTML = '<div class="text-[#555577] italic text-sm text-center py-8">No memories yet. Share an experience above to begin.</div>';
-        return;
-      }
-
-      const typeColors = {
-        experience: 'bg-[#4ecdc4]/20 text-[#4ecdc4] border-[#4ecdc4]/30',
-        observation: 'bg-[#6c63ff]/20 text-[#8b83ff] border-[#6c63ff]/30',
-        concept: 'bg-[#ffd700]/20 text-[#ffd700] border-[#ffd700]/30',
-        hypothesis: 'bg-[#ff6b9d]/20 text-[#ff6b9d] border-[#ff6b9d]/30',
-        rule: 'bg-[#ff9f43]/20 text-[#ff9f43] border-[#ff9f43]/30'
-      };
-
-      container.innerHTML = packets.slice().sort((a, b) => b.strength - a.strength).map(p => {
-        const tc = typeColors[p.type] || typeColors.experience;
-        const connCount = connections.filter(c => c.source_id === p.id || c.target_id === p.id).length;
-        const tags = (p.tags || []).slice(0, 4);
-
-        return `<div class="packet-card bg-[#16213e] border border-[#2a2a4a] rounded-lg p-3 cursor-pointer" onclick="showPacketDetail('${p.id}')">
-          <div class="flex items-start justify-between gap-2">
-            <div class="flex-1 min-w-0">
-              <div class="text-sm leading-relaxed line-clamp-2">${escapeHtml(p.content)}</div>
-              <div class="flex items-center gap-2 mt-2 flex-wrap">
-                <span class="type-badge ${tc} border">${p.type}</span>
-                <span class="text-xs text-[#8888aa]" title="Strength">★ ${(p.strength * 100).toFixed(0)}</span>
-                <span class="text-xs text-[#8888aa]" title="Connections">↔ ${connCount}</span>
-                <span class="text-xs text-[#8888aa]" title="Rewrites">↻ ${p.rewrite_count || 0}</span>
-                <span class="text-xs text-[#4ecdc4]" title="Coherence">☯ ${(p.coherence_score * 100).toFixed(0)}%</span>
-                ${tags.map(t => `<span class="text-[10px] bg-[#2a2a4a] text-[#8888aa] px-1.5 py-0.5 rounded">${escapeHtml(t)}</span>`).join('')}
-              </div>
-            </div>
-          </div>
-        </div>`;
-      }).join('');
-    }
-
-    function renderConcepts(packets) {
-      const container = document.getElementById('concepts-list');
-      const concepts = packets.filter(p => p.type === 'concept');
-      if (concepts.length === 0) {
-        container.innerHTML = '<div class="text-[#555577] italic text-sm text-center py-8">No concepts have emerged yet. Keep sharing experiences — abstractions form naturally over time.</div>';
-        return;
-      }
-      container.innerHTML = concepts.sort((a, b) => b.coherence_score - a.coherence_score).map(c => `
-        <div class="bg-[#16213e] border border-[#ffd700]/30 rounded-lg p-4">
-          <div class="flex items-start gap-3">
-            <span class="text-[#ffd700] text-lg mt-0.5 shrink-0">◆</span>
-            <div>
-              <div class="text-sm leading-relaxed">${escapeHtml(c.content)}</div>
-              <div class="flex flex-wrap items-center gap-3 mt-2">
-                <span class="type-badge bg-[#ffd700]/20 text-[#ffd700] border border-[#ffd700]/30">concept</span>
-                <span class="text-xs text-[#8888aa]">☯ coherence ${(c.coherence_score * 100).toFixed(0)}%</span>
-                <span class="text-xs text-[#8888aa]">★ strength ${(c.strength * 100).toFixed(0)}%</span>
-                <span class="text-xs text-[#8888aa]">↻ ${c.rewrite_count || 0} rewrites</span>
-                ${(c.tags || []).slice(0, 3).map(t => `<span class="text-[10px] bg-[#2a2a4a] text-[#8888aa] px-1.5 py-0.5 rounded">${escapeHtml(t)}</span>`).join('')}
-              </div>
-            </div>
-          </div>
+    html += `
+      <div class="dialogue-turn border-l-2 ${borderColor} pl-4 py-2" style="animation-delay:${Math.min(i * 0.08, 0.5)}s">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-sm font-semibold ${color}">${name}</span>
+          <span class="text-[10px] text-[#71767b]">${role}</span>
+          <span class="text-[10px] text-[#71767b] ml-auto">${time}</span>
         </div>
-      `).join('');
+        <div class="text-sm leading-relaxed" id="turn-${turn.id}">
+          ${escapeHtml(turn.content)}
+        </div>
+        ${turn.thoughts ? `
+          <div class="mt-2">
+            <button onclick="toggleThoughts(${turn.id})" class="text-[10px] text-[#71767b] hover:text-[#e7e9ea] transition-colors">🔍 show internal reasoning</button>
+            <div id="thoughts-${turn.id}" class="hidden mt-1 text-xs text-[#71767b] bg-[#202327] rounded-lg p-2 leading-relaxed">${escapeHtml(turn.thoughts)}</div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+}
+
+function toggleThoughts(turnId) {
+  const el = document.getElementById(`thoughts-${turnId}`);
+  if (el) el.classList.toggle('hidden');
+}
+
+// ── Submit to Inbox ──
+async function submitInbox() {
+  const input = document.getElementById('inbox-input');
+  const content = input.value.trim();
+  if (!content || isSubmitting) return;
+
+  isSubmitting = true;
+  const btn = document.getElementById('inbox-submit');
+  btn.disabled = true;
+  btn.textContent = 'Thinking...';
+
+  try {
+    const res = await fetch('/api/inbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, author: 'web' })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed');
+
+    // Show feedback
+    const feedback = document.getElementById('inbox-feedback');
+    feedback.className = 'mt-2 text-xs text-[#4ecdc4] fade-up';
+    feedback.textContent = `✨ Kevin & Jenny are discussing your idea...`;
+    feedback.style.display = 'block';
+
+    input.value = '';
+
+    // Wait a moment then reload
+    setTimeout(() => {
+      Promise.all([loadDialogue(), loadState()]);
+    }, 500);
+
+    // Keep polling for more turns
+    let polls = 0;
+    const pollInterval = setInterval(async () => {
+      polls++;
+      await Promise.all([loadDialogue(), loadState()]);
+      if (polls >= 8) clearInterval(pollInterval);
+    }, 2000);
+  } catch (e) {
+    document.getElementById('inbox-feedback').className = 'mt-2 text-xs text-[#ff6b9d] fade-up';
+    document.getElementById('inbox-feedback').textContent = `⚠ ${e.message}`;
+    document.getElementById('inbox-feedback').style.display = 'block';
+  } finally {
+    isSubmitting = false;
+    btn.disabled = false;
+    btn.textContent = 'Drop Idea';
+  }
+}
+
+// ── Manual Think ──
+async function triggerThink() {
+  if (isThinking) return;
+  isThinking = true;
+
+  try {
+    await fetch('/api/think', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    setTimeout(() => {
+      Promise.all([loadDialogue(), loadState()]);
+    }, 400);
+  } catch (e) {
+    console.error('Think error:', e);
+  } finally {
+    isThinking = false;
+  }
+}
+
+// ── Memory Tab ──
+async function loadMemoryTab() {
+  const container = document.getElementById('memory-container');
+  if (allPackets.length === 0) {
+    container.innerHTML = '<div class="text-center py-8 text-[#71767b] text-sm">No packets yet</div>';
+    return;
+  }
+
+  const typeColors = { experience: '#4ecdc4', observation: '#1d9bf0', concept: '#e2b714', hypothesis: '#ff6b9d', rule: '#71767b' };
+  let html = `<div class="text-xs text-[#71767b] mb-3">${allPackets.length} thought packets</div>`;
+
+  allPackets.slice(0, 50).forEach(p => {
+    const tc = typeColors[p.type] || '#71767b';
+    html += `
+      <div onclick="togglePacketDetail('p-${p.id}')" class="bg-[#1a1f2e] border border-[#2f3336] rounded-xl p-3 card-hover cursor-pointer">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-[10px] px-2 py-0.5 rounded-full" style="background:${tc}20;color:${tc}">${p.type}</span>
+          <span class="text-[10px] text-[#71767b]">${(p.strength * 100).toFixed(0)}%</span>
+          <span class="text-[10px] text-[#71767b]">↻ ${p.rewrite_count}</span>
+        </div>
+        <div class="text-sm leading-relaxed">${escapeHtml(p.content.slice(0, 200))}${p.content.length > 200 ? '...' : ''}</div>
+        <div id="p-${p.id}" class="hidden mt-2 text-xs text-[#71767b] space-y-1">
+          <div>☯ coherence: ${(p.coherence_score * 100).toFixed(0)}%</div>
+          ${p.tags && p.tags.length ? `<div>🏷 ${p.tags.join(', ')}</div>` : ''}
+          <div>📅 ${p.created_at}</div>
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+}
+
+function togglePacketDetail(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('hidden');
+}
+
+// ── Archive Tab ──
+async function loadArchiveTab() {
+  const container = document.getElementById('archive-container');
+  try {
+    const [turnsRes, groupsRes] = await Promise.all([
+      fetch('/api/dialogue?limit=200'),
+      fetch('/api/dialogue/groups?limit=50')
+    ]);
+    const turns = (await turnsRes.json()).data || [];
+    const groups = (await groupsRes.json()).data || [];
+
+    if (groups.length === 0 && turns.length === 0) {
+      container.innerHTML = '<div class="text-center py-8 text-[#71767b] text-sm">No dialogue history yet. Drop an idea to start.</div>';
+      return;
     }
 
-    function renderLog(logs) {
-      const container = document.getElementById('log-list');
-      if (!logs || logs.length === 0) {
-        container.innerHTML = '<div class="text-[#555577] italic text-sm text-center py-8">No activity yet.</div>';
-        return;
-      }
-      const agentColors = { kevin: 'text-[#4ecdc4]', jenny: 'text-[#ff6b9d]', system: 'text-[#6c63ff]' };
-      container.innerHTML = logs.slice(-100).reverse().map(l => {
-        const color = agentColors[l.agent] || 'text-[#8888aa]';
-        const time = new Date(l.created_at + 'Z').toLocaleTimeString();
-        let detailStr = '';
-        if (l.detail) {
-          try {
-            const d = JSON.parse(l.detail);
-            if (d.reason) detailStr = ` — ${d.reason}`;
-            else if (d.type) detailStr += ` (${d.type})`;
-            else if (d.thoughts) {
-              const firstLine = d.thoughts.split('\n')[0];
-              detailStr = ` — ${firstLine.slice(0, 60)}`;
-            }
-          } catch {}
-        }
-        return `<div class="text-xs font-mono flex gap-2 ${l.agent === 'system' ? 'opacity-50' : ''} py-0.5 hover:bg-[#16213e]/50 px-1 rounded">
-          <span class="text-[#444466] shrink-0">${time}</span>
-          <span class="${color} shrink-0 font-medium">${l.agent}</span>
-          <span class="text-[#8888aa]">${l.action}</span>
-          <span class="text-[#555577] truncate">${escapeHtml(detailStr)}</span>
+    let html = `<div class="text-xs text-[#71767b] mb-3">${turns.length} total turns across ${groups.length} conversations</div>`;
+
+    // Show conversations grouped
+    if (groups.length > 0) {
+      html += groups.slice(0, 30).map(g => {
+        const count = g.count;
+        const date = formatDate(g.created_at);
+        const firstSpeaker = g.first_speaker === 'kevin' ? 'Kevin 🟢' : 'Jenny 🧶';
+        return `
+          <div onclick="loadConversationGroup('${g.turn_group}')" class="bg-[#1a1f2e] border border-[#2f3336] rounded-xl p-3 card-hover cursor-pointer">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium">${firstSpeaker} started</span>
+              <span class="text-xs text-[#71767b]">${count} turns</span>
+            </div>
+            <div class="text-xs text-[#71767b] mt-1">${date}</div>
+          </div>
+        `;
+      }).join('');
+    } else {
+      // Flat view
+      html += turns.map(t => {
+        const isK = t.speaker === 'kevin';
+        return `<div class="border-l-2 ${isK ? 'border-l-[#4ecdc4]' : 'border-l-[#ff6b9d]'} pl-3 py-2 text-sm">
+          <span class="font-medium ${isK ? 'text-[#4ecdc4]' : 'text-[#ff6b9d]'}">${isK ? 'Kevin' : 'Jenny'}</span>
+          <span class="text-[#71767b] text-xs ml-2">${escapeHtml(t.content.slice(0, 120))}${t.content.length > 120 ? '...' : ''}</span>
         </div>`;
       }).join('');
     }
 
-    function renderGraph(packets, connections) {
-      const container = document.getElementById('graph-view');
-      if (packets.length === 0) {
-        container.innerHTML = '<div class="text-[#555577] italic text-sm text-center py-8">Share experiences to build the connection graph.</div>';
-        return;
-      }
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = `<div class="text-center py-8 text-[#ff6b9d] text-sm">Error loading archive: ${e.message}</div>`;
+  }
+}
 
-      // Build adjacency
-      const adj = {};
-      for (const c of connections) {
-        if (!adj[c.source_id]) adj[c.source_id] = [];
-        if (!adj[c.target_id]) adj[c.target_id] = [];
-        adj[c.source_id].push({ id: c.target_id, rel: c.relationship, strength: c.strength });
-        adj[c.target_id].push({ id: c.source_id, rel: c.relationship, strength: c.strength });
-      }
+async function loadConversationGroup(groupId) {
+  const container = document.getElementById('archive-container');
+  try {
+    const res = await fetch(`/api/dialogue?group=${groupId}&limit=100`);
+    const turns = (await res.json()).data || [];
+    container.innerHTML = `
+      <button onclick="loadArchiveTab()" class="text-xs text-[#1d9bf0] hover:underline mb-3">← Back to all conversations</button>
+      ${turns.map(t => {
+        const isK = t.speaker === 'kevin';
+        const borderColor = isK ? 'border-l-[#4ecdc4]' : 'border-l-[#ff6b9d]';
+        const name = isK ? 'Kevin' : 'Jenny';
+        return `<div class="border-l-2 ${borderColor} pl-3 py-2 text-sm">
+          <span class="font-semibold ${isK ? 'text-[#4ecdc4]' : 'text-[#ff6b9d]'}">${name}</span>
+          <div class="mt-1 leading-relaxed">${escapeHtml(t.content)}</div>
+          <div class="text-[10px] text-[#71767b] mt-1">${formatTime(t.created_at)}</div>
+        </div>`;
+      }).join('')}
+    `;
+  } catch (e) {
+    container.innerHTML = `<div class="text-center py-8 text-[#ff6b9d] text-sm">Error: ${e.message}</div>`;
+  }
+}
 
-      const pmap = {};
-      for (const p of packets) pmap[p.id] = p;
+// ── Best Ideas Tab ──
+async function loadBestTab() {
+  const container = document.getElementById('best-container');
+  try {
+    const res = await fetch('/api/best-ideas');
+    const json = await res.json();
+    const ideas = json.data || [];
 
-      const lines = [];
-      lines.push(`┌${'─'.repeat(50)}┐`);
-      lines.push(`│  Packet Connection Graph${' '.repeat(30)}│`);
-      lines.push(`│  Nodes: ${String(packets.length).padStart(3)}  ·  Edges: ${String(connections.length).padStart(3)}${' '.repeat(15)}│`);
-      lines.push(`└${'─'.repeat(50)}┘`);
-      lines.push('');
-
-      let shown = 0;
-      for (const [pid, neighbors] of Object.entries(adj)) {
-        if (shown >= 12) { lines.push(`  ... and ${packets.length - shown} more nodes`); break; }
-        const p = pmap[pid];
-        if (!p) continue;
-        lines.push(`  ◈ [${p.type.slice(0, 10).padEnd(10)}] ${p.content.slice(0, 45)}${p.content.length > 45 ? '...' : ''}`);
-        for (const n of neighbors.slice(0, 2)) {
-          const np = pmap[n.id];
-          if (np) {
-            lines.push(`    └──▶ [${np.type.slice(0, 10).padEnd(10)}] ${np.content.slice(0, 35)}${np.content.length > 35 ? '...' : ''}`);
-          }
-        }
-        if (neighbors.length > 2) lines.push(`    ┊ +${neighbors.length - 2} more connections`);
-        shown++;
-      }
-
-      container.innerHTML = `<pre class="text-xs font-mono text-[#8888aa] leading-relaxed">${lines.join('\n')}</pre>`;
+    if (ideas.length === 0) {
+      container.innerHTML = '<div class="text-center py-8 text-[#71767b] text-sm">⭐ No ideas promoted yet. Kevin & Jenny will decide what deserves the spotlight.</div>';
+      return;
     }
 
-    function renderPacketCount(count) {
-      document.getElementById('packet-count-display').textContent = `${count} packet${count !== 1 ? 's' : ''}`;
-    }
+    container.innerHTML = ideas.map(idea => `
+      <div class="bg-gradient-to-r from-[#1a1f2e] to-[#1d2939] border border-[#2f3336] rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-gold text-lg">⭐</span>
+          <span class="text-sm font-semibold">${escapeHtml(idea.title)}</span>
+          <span class="text-[10px] text-[#71767b] ml-auto">promoted by ${idea.promoted_by === 'kevin' ? 'Kevin 🟢' : 'Jenny 🧶'}</span>
+        </div>
+        <div class="text-sm text-[#e7e9ea]/80 leading-relaxed">${escapeHtml(idea.content)}</div>
+        ${idea.promoted_reason ? `<div class="mt-2 text-xs text-[#71767b] italic">"${escapeHtml(idea.promoted_reason)}"</div>` : ''}
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="text-center py-8 text-[#ff6b9d] text-sm">Error: ${e.message}</div>`;
+  }
+}
 
-    // ============================================================
-    // PACKET DETAIL
-    // ============================================================
-    let currentDetail = null;
-    async function showPacketDetail(id) {
-      try {
-        const res = await fetch(`/api/packets/${id}`);
-        const json = await res.json();
-        if (!json.success) return;
-        const { packet, connections, connectedPackets } = json.data;
+// ── Helpers ──
+function suggestThought(text) {
+  document.getElementById('inbox-input').value = text;
+  document.getElementById('inbox-input').focus();
+}
 
-        if (currentDetail === id) {
-          document.getElementById('packets-list').querySelectorAll('.packet-detail').forEach(d => d.remove());
-          currentDetail = null;
-          return;
-        }
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-        document.getElementById('packets-list').querySelectorAll('.packet-detail').forEach(d => d.remove());
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr.replace(' ', 'T') + 'Z');
+  if (isNaN(d.getTime())) return dateStr.slice(11, 16);
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
 
-        const cards = document.getElementById('packets-list').children;
-        for (let i = 0; i < cards.length; i++) {
-          if (cards[i].classList.contains('packet-card')) {
-            const title = cards[i].querySelector('.text-sm');
-            if (title && title.textContent.includes(packet.content.slice(0, 30))) {
-              const detail = document.createElement('div');
-              detail.className = 'packet-detail bg-[#0f0f1a] border border-[#6c63ff]/30 rounded-lg p-4 mb-2 text-sm animate-in';
-              detail.innerHTML = `
-                <div class="font-mono text-[10px] text-[#555577] mb-2">ID: ${packet.id}</div>
-                <div class="mb-3 leading-relaxed">${escapeHtml(packet.content)}</div>
-                <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#8888aa] mb-3">
-                  <span>Type: <strong class="text-[#e0e0f0]">${packet.type}</strong></span>
-                  <span>★ Strength: <strong class="text-[#e0e0f0]">${(packet.strength * 100).toFixed(0)}%</strong></span>
-                  <span>☯ Coherence: <strong class="text-[#e0e0f0]">${(packet.coherence_score * 100).toFixed(0)}%</strong></span>
-                  <span>↻ Rewrites: <strong class="text-[#e0e0f0]">${packet.rewrite_count}</strong></span>
-                  <span>Created: <strong class="text-[#e0e0f0]">${new Date(packet.created_at + 'Z').toLocaleString()}</strong></span>
-                  <span>Updated: <strong class="text-[#e0e0f0]">${new Date(packet.last_updated + 'Z').toLocaleString()}</strong></span>
-                </div>
-                ${(packet.tags || []).length > 0 ? `<div class="flex flex-wrap gap-1 mb-3">${packet.tags.map(t => `<span class="text-xs bg-[#2a2a4a] text-[#8888aa] px-2 py-0.5 rounded">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
-                ${connectedPackets.length > 0 ? `
-                  <div class="text-[#8888aa] text-xs font-mono mb-1">Connected To (${connectedPackets.length}):</div>
-                  ${connectedPackets.slice(0, 8).map(cp => `
-                    <div class="pl-3 border-l-2 border-[#2a2a4a] mb-1 text-xs">
-                      <span class="type-badge text-[10px] bg-[#16213e] text-[#8888aa] border border-[#2a2a4a] mr-1">${cp.type}</span>
-                      ${escapeHtml(cp.content.slice(0, 60))}${cp.content.length > 60 ? '...' : ''}
-                    </div>
-                  `).join('')}
-                ` : '<div class="text-[#555577] italic text-xs">No connections yet</div>'}
-              `;
-              cards[i].after(detail);
-              currentDetail = id;
-              break;
-            }
-          }
-        }
-      } catch {}
-    }
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr.replace(' ', 'T') + 'Z');
+  if (isNaN(d.getTime())) return dateStr.slice(0, 10);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
-    // ============================================================
-    // ASK / RESPONDER (Simple keyword responder)
-    // ============================================================
-    async function askSystem() {
-      const input = document.getElementById('ask-input');
-      const query = input.value.trim();
-      if (!query) return;
+// ── Polling ──
+async function poll() {
+  await loadState();
+}
 
-      const responseEl = document.getElementById('ask-response');
-      responseEl.innerHTML = '<span class="text-[#555577] italic">Searching memory...</span>';
-
-      try {
-        const res = await fetch(`/api/packets?search=${encodeURIComponent(query)}`);
-        const json = await res.json();
-        if (!json.success || !json.data.length) {
-          responseEl.innerHTML = '<span class="text-[#8888aa]">Based on my memory, I don\'t have information about that yet. Share an experience about it!</span>';
-          return;
-        }
-
-        const top = json.data.slice(0, 5);
-        responseEl.innerHTML = [
-          `<div class="text-[#4ecdc4] font-mono text-xs mb-2">Found ${json.data.length} relevant memory packets:</div>`,
-          ...top.map(p => `<div class="mb-2 p-2 bg-[#16213e] rounded-lg">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="type-badge text-[10px] bg-[#2a2a4a] text-[#8888aa] border border-[#2a2a4a]">${p.type}</span>
-              <span class="text-[10px] text-[#555577]">☯ ${(p.coherence_score * 100).toFixed(0)}%</span>
-            </div>
-            <div class="text-sm">${escapeHtml(p.content)}</div>
-          </div>`)
-        ].join('');
-      } catch (err) {
-        responseEl.innerHTML = `<span class="text-red-400">Error: ${err.message}</span>`;
-      }
-    }
-
-    // ============================================================
-    // TABS
-    // ============================================================
-    function switchTab(tab) {
-      currentTab = tab;
-      document.querySelectorAll('.tab-btn').forEach(b => {
-        b.className = b.id === `tab-${tab}`
-          ? 'tab-btn px-4 py-2.5 text-sm rounded-t-lg bg-[#1a1a2e] border border-[#2a2a4a] border-b-0 text-[#e0e0f0] font-medium whitespace-nowrap'
-          : 'tab-btn px-4 py-2.5 text-sm rounded-t-lg bg-[#16213e] border border-[#2a2a4a] border-b-0 text-[#8888aa] whitespace-nowrap';
-      });
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-      document.getElementById(`content-${tab}`).classList.remove('hidden');
-      if (tab === 'log') {
-        fetch('/api/log').then(r => r.json()).then(j => { if (j.success) renderLog(j.data); });
-      }
-      if (tab === 'respond') {
-        document.getElementById('ask-input').focus();
-      }
-    }
-
-    // ============================================================
-    // RESET
-    // ============================================================
-    async function resetSystem() {
-      if (!confirm('Reset the entire system? All memories will be lost.')) return;
-      try {
-        await fetch('/api/reset', { method: 'POST' });
-        document.getElementById('kevin-thoughts').innerHTML = '<span class="text-[#555577] italic">System reset. Awaiting experience...</span>';
-        document.getElementById('jenny-thoughts').innerHTML = '<span class="text-[#555577] italic">System reset. Awaiting experience...</span>';
-        document.getElementById('kevin-badge').textContent = 'reset';
-        document.getElementById('jenny-badge').textContent = 'reset';
-        document.getElementById('result-banner').classList.add('hidden');
-        lastThinking = { kevin: null, jenny: null };
-        await loadState();
-      } catch {}
-    }
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
-  </script>
+// ── Init ──
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadState();
+  // Poll every 6 seconds for new dialogue
+  setInterval(poll, 6000);
+});
+</script>
 </body>
 </html>
