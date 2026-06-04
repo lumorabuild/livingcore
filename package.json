@@ -1,0 +1,22 @@
+{
+  "name": "livingcore",
+  "version": "1.0.0",
+  "description": "A lightweight, self-evolving cognitive architecture running on Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "wrangler deploy --dry-run",
+    "migrate:local": "wrangler d1 migrations apply livingcore --local",
+    "migrate:remote": "wrangler d1 migrations apply livingcore --remote",
+    "db:seed": "wrangler d1 execute livingcore --local --command=\"SELECT 1\""
+  },
+  "dependencies": {
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250401.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}
