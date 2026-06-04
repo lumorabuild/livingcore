@@ -459,7 +459,7 @@ export async function generateStandaloneThought(
   return result.turn;
 }
 
-function generateId(): string {
+export function generateId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let id = '';
   for (let i = 0; i < 12; i++) {
