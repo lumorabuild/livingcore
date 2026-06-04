@@ -16,11 +16,14 @@ export function generateId(): string {
 export async function createPacket(db: D1Database, packet: Omit<ThoughtPacket, 'created_at' | 'last_updated'>): Promise<ThoughtPacket> {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const tags = JSON.stringify(packet.tags || []);
+  const secondaryCats = JSON.stringify(packet.secondary_categories || []);
   
   await db.prepare(
-    `INSERT INTO packets (id, content, type, strength, tags, created_at, last_updated, rewrite_count, coherence_score)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(packet.id, packet.content, packet.type, packet.strength, tags, now, now, packet.rewrite_count || 0, packet.coherence_score || 0).run();
+    `INSERT INTO packets (id, content, type, strength, tags, primary_category, secondary_categories, created_at, last_updated, rewrite_count, coherence_score)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(packet.id, packet.content, packet.type, packet.strength, tags,
+    packet.primary_category || null, secondaryCats,
+    now, now, packet.rewrite_count || 0, packet.coherence_score || 0).run();
   
   return { ...packet, created_at: now, last_updated: now };
 }
@@ -36,6 +39,8 @@ export async function updatePacket(db: D1Database, id: string, updates: Partial<
   if (updates.tags !== undefined) { fields.push('tags = ?'); values.push(JSON.stringify(updates.tags)); }
   if (updates.rewrite_count !== undefined) { fields.push('rewrite_count = ?'); values.push(updates.rewrite_count); }
   if (updates.coherence_score !== undefined) { fields.push('coherence_score = ?'); values.push(updates.coherence_score); }
+  if (updates.primary_category !== undefined) { fields.push('primary_category = ?'); values.push(updates.primary_category); }
+  if (updates.secondary_categories !== undefined) { fields.push('secondary_categories = ?'); values.push(JSON.stringify(updates.secondary_categories)); }
   
   fields.push('last_updated = ?');
   values.push(now);
@@ -84,6 +89,13 @@ export async function getPacketsByType(db: D1Database, type: PacketType): Promis
   return result.results.map(rowToPacket);
 }
 
+export async function getPacketsByCategory(db: D1Database, categoryId: string): Promise<ThoughtPacket[]> {
+  const result = await db.prepare(
+    'SELECT * FROM packets WHERE primary_category = ? ORDER BY strength DESC, last_updated DESC'
+  ).bind(categoryId).all<Record<string, any>>();
+  return result.results.map(rowToPacket);
+}
+
 export async function getPacketCount(db: D1Database): Promise<number> {
   const result = await db.prepare('SELECT COUNT(*) as count FROM packets').first<{count: number}>();
   return result?.count || 0;
@@ -96,6 +108,10 @@ function rowToPacket(row: Record<string, any>): ThoughtPacket {
     type: row.type as PacketType,
     strength: row.strength,
     tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags || [],
+    primary_category: row.primary_category || null,
+    secondary_categories: typeof row.secondary_categories === 'string'
+      ? JSON.parse(row.secondary_categories)
+      : row.secondary_categories || [],
     created_at: row.created_at,
     last_updated: row.last_updated,
     rewrite_count: row.rewrite_count,
@@ -213,12 +229,28 @@ export async function getFullState(db: D1Database): Promise<{
   connections: PacketConnection[];
   recent_log: AgentLogEntry[];
   system_state: Record<string, string>;
+  categories: any[];
+  rss_stats: { total: number; new: number; considered: number; discussed: number; ignored: number };
 }> {
-  const [packets, connections, recent_log, system_state] = await Promise.all([
+  const [packets, connections, recent_log, system_state, categories, rssRows] = await Promise.all([
     getAllPackets(db),
     getAllConnections(db),
     getRecentLogs(db, 50),
-    getSystemState(db)
+    getSystemState(db),
+    db.prepare('SELECT * FROM categories').all<any>(),
+    db.prepare('SELECT status, COUNT(*) as count FROM rss_items GROUP BY status').all<{status: string; count: number}>()
   ]);
-  return { packets, connections, recent_log, system_state };
+
+  const rss_stats = { total: 0, new: 0, considered: 0, discussed: 0, ignored: 0 };
+  for (const row of rssRows.results) {
+    rss_stats.total += row.count;
+    if (row.status in rss_stats) (rss_stats as any)[row.status] = row.count;
+  }
+
+  const catResults = categories.results.map((r: any) => ({
+    id: r.id, name: r.name, description: r.description,
+    color: r.color, icon: r.icon, created_at: r.created_at
+  }));
+
+  return { packets, connections, recent_log, system_state, categories: catResults, rss_stats };
 }

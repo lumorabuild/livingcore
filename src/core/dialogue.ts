@@ -1,10 +1,13 @@
 // Dialogue Engine — Kevin & Jenny's living conversation
 // Generates natural-sounding dialogue turns using the existing packet memory system.
 // No LLM — pure symbolic generation from memory state.
+// Phase 0+: Agents read ThinkingRules before speaking, can propose rule changes.
 
 import { ThoughtPacket, PacketConnection } from '../db/schema';
 import * as packetOps from '../db/packet';
 import * as dialogueOps from '../db/dialogue';
+import * as rulesDb from '../db/rules';
+import { loadThinkingRules, kevinProposesRuleChange, jennyProposesRuleChange, checkPendingProposals } from './thinking_rules';
 
 // ── Shared helpers ──
 
@@ -289,6 +292,54 @@ export async function generateDialogueTurn(
     summary: result.content.slice(0, 120)
   });
 
+  // ── Phase 0+: Agent proposes rule changes (if conditions met) ──
+  try {
+    const rules = await loadThinkingRules(db);
+    const selfImp = rules.self_improvement;
+    const recentProposals = await rulesDb.getPendingProposals(db);
+    const recentAdoptions = await rulesDb.getRecentAdoptions(db, 5);
+    const recentProposalsCount = recentProposals.length;
+
+    // Count uncategorized packets (for Jenny's proposals)
+    const allPkts = await packetOps.getAllPackets(db);
+    const uncategorizedCount = allPkts.filter(p => !p.primary_category).length;
+
+    // Current coherence
+    const stateRaw = await packetOps.getSystemState(db);
+    const currentCoherence = parseFloat(stateRaw.avg_coherence || '0.4');
+
+    if (speaker === 'kevin') {
+      const proposal = await kevinProposesRuleChange(db, currentCoherence, nextTurnNumber, recentProposalsCount);
+      if (proposal.shouldPropose && proposal.proposedContent && proposal.reason) {
+        await rulesDb.createProposal(
+          db, 'kevin', proposal.ruleName,
+          proposal.proposedContent, proposal.reason,
+          currentCoherence, turn.id
+        );
+        await packetOps.logAction(db, 'kevin', 'rule_proposal', undefined, {
+          rule_name: proposal.ruleName,
+          reason: proposal.reason.slice(0, 200)
+        });
+      }
+    } else {
+      const proposal = await jennyProposesRuleChange(db, currentCoherence, nextTurnNumber, recentProposalsCount, uncategorizedCount);
+      if (proposal.shouldPropose && proposal.proposedContent && proposal.reason) {
+        await rulesDb.createProposal(
+          db, 'jenny', proposal.ruleName,
+          proposal.proposedContent, proposal.reason,
+          currentCoherence, turn.id
+        );
+        await packetOps.logAction(db, 'jenny', 'rule_proposal', undefined, {
+          rule_name: proposal.ruleName,
+          reason: proposal.reason.slice(0, 200)
+        });
+      }
+    }
+  } catch (err) {
+    // Rule system failures shouldn't break dialogue
+    console.error('Rule proposal error:', err);
+  }
+
   // Determine next speaker
   const nextSpeaker: 'kevin' | 'jenny' = speaker === 'kevin' ? 'jenny' : 'kevin';
 
@@ -338,6 +389,21 @@ export async function continueDialogueChain(
 
   // After chain completes, mark any pending inbox items
   await updateInboxStatusesAfterDialogue(db, turnGroup).catch(() => {});
+
+  // Check pending rule proposals — evaluate if coherence has changed
+  try {
+    const stateRaw = await packetOps.getSystemState(db);
+    const coherenceVal = parseFloat(stateRaw.avg_coherence || '0.4');
+    const result = await checkPendingProposals(db, coherenceVal);
+    if (result.adopted > 0) {
+      await packetOps.logAction(db, 'system', 'rules_adopted', undefined, {
+        count: result.adopted,
+        reasons: result.reasons.join('; ')
+      });
+    }
+  } catch (err) {
+    console.error('Rule evaluation error:', err);
+  }
 }
 
 async function updateInboxStatusesAfterDialogue(

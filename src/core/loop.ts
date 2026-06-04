@@ -97,6 +97,8 @@ export async function processInput(db: D1Database, input: string): Promise<Proce
       type: proposal.type,
       strength: 0.3,
       tags: proposal.tags,
+      primary_category: proposal.primary_category || null,
+      secondary_categories: proposal.secondary_categories || [],
       rewrite_count: 0,
       coherence_score: 0.1
     });
