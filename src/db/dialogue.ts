@@ -54,7 +54,7 @@ export async function getDialogueTurns(
     query += ' WHERE ' + conditions.join(' AND ');
   }
   
-  query += ' ORDER BY id ASC';
+  query += ' ORDER BY id DESC';
   
   if (options.limit) {
     query += ' LIMIT ?';
