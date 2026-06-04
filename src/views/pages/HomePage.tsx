@@ -227,11 +227,7 @@ function InboxSection() {
             style="outline-color:#71767b;"
             placeholder="Your name (opt)"
           />
-          <div class="flex gap-1.5 text-[11px]">
-            <button onclick="suggestThought('What if machines could dream?')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336] whitespace-nowrap">💡 Dream?</button>
-            <button onclick="suggestThought('The universe is a thought.')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336] whitespace-nowrap">🌌 Universe</button>
-            <button onclick="suggestThought('What is beauty?')" class="text-[#71767b] hover:text-[#e7e9ea] transition-colors px-2 py-1 rounded-lg bg-[#202327] border border-[#2f3336] whitespace-nowrap">✨ Beauty</button>
-          </div>
+          
         </div>
         <button id="inbox-submit" onclick="submitInbox()"
           class="bg-[#71767b] hover:bg-[#8b8f94] text-white text-xs font-medium px-4 py-1.5 rounded-full transition-colors disabled:opacity-40 flex-shrink-0">
