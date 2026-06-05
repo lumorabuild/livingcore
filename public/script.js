@@ -113,29 +113,38 @@
 
   // ── Typing Animation ──
 
-  // Reveal turns one by one with a delay
-  function animateTurns(container) {
+  // Reveal the on-load "Now" messages by reusing the server-rendered elements
+  // (so there's no duplicate). Older ones fade in quickly; the newest types out.
+  async function animateTurns(container) {
     if (!container) return;
-    var turnEls = container.querySelectorAll('.dialogue-turn');
+    var turnEls = Array.prototype.slice.call(container.children);
     if (turnEls.length === 0) return;
 
-    // Hide all turns first
+    // Hide all first
     turnEls.forEach(function (el) {
       el.style.opacity = '0';
       el.style.transform = 'translateY(8px)';
-      el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+      el.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
     });
 
-    // Reveal one by one
-    var delay = 6000; // 3 seconds between each turn (including typing sim + pause)
-    turnEls.forEach(function (el, i) {
-      setTimeout(function () {
-        el.style.opacity = '1';
-        el.style.transform = 'translateY(0)';
-      }, i * delay + 500); // 500ms initial delay, then 6s between turns
-    });
+    for (var i = 0; i < turnEls.length; i++) {
+      var el = turnEls[i];
+      var isNewest = (i === turnEls.length - 1);
 
-    return turnEls.length * delay + 1000; // Total animation duration
+      el.style.opacity = '1';
+      el.style.transform = 'translateY(0)';
+
+      // The newest message types out for a "just happened" feel; older ones just fade.
+      if (isNewest) {
+        var p = el.querySelector('p');
+        if (p) {
+          await typeText(p, p.textContent || '', 14);
+        }
+        await sleep(200);
+      } else {
+        await sleep(280);
+      }
+    }
   }
 
   // ── Auto-Polling: check for new dialogue turns every 5 seconds ──
@@ -144,23 +153,27 @@
   var isAnimating = false;
 
   // Read initial state from page
-  function initPolling() {
+  async function initPolling() {
     var timeline = document.getElementById('dialogue-timeline');
     if (timeline) {
       var turnId = parseInt(timeline.getAttribute('data-latest-turn-id') || '0');
       lastTurnId = turnId;
     }
 
-    // Start typing animation for initially loaded turns
+    // Animate the initially loaded turns (reuses the SSR elements — no duplicates)
     var nowContainer = document.getElementById('now-turns-container');
     if (nowContainer) {
-      // Delay initial animation so the page loads first
-      setTimeout(function () {
-        animateTurns(nowContainer);
-      }, 2000);
+      isAnimating = true;
+      // Hide immediately to avoid a flash, then reveal/type them in
+      Array.prototype.slice.call(nowContainer.children).forEach(function (el) {
+        el.style.opacity = '0';
+      });
+      await sleep(300);
+      await animateTurns(nowContainer);
+      isAnimating = false;
     }
 
-    // Start polling
+    // Then start polling for genuinely new turns
     pollLoop();
   }
 

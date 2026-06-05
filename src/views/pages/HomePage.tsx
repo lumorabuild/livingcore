@@ -301,7 +301,10 @@ function DialogueTimeline({ turns }: { turns: any[] }) {
     );
   }
 
-  // Group turns by turn_group, keeping the latest at the top
+  // Group turns by turn_group. `turns` arrives newest-first (id DESC), so we must
+  // re-sort each group oldest→newest; otherwise the newest turn ends up first and
+  // the "latest turn id" (used for polling) becomes the OLDEST — which makes the
+  // poller re-fetch turns already on the page and type them in again as duplicates.
   const groups = new Map<string, any[]>();
   for (const turn of turns) {
     const g = turn.turn_group;
@@ -309,8 +312,12 @@ function DialogueTimeline({ turns }: { turns: any[] }) {
     groups.get(g)!.push(turn);
   }
 
-  // Sort each group by turn_number ascending
-  // But display groups latest-first
+  // Sort each group's turns oldest → newest by id (stable, monotonic)
+  for (const arr of groups.values()) {
+    arr.sort((a, b) => (a.id || 0) - (b.id || 0));
+  }
+
+  // Display groups latest-first
   const groupKeys = Array.from(groups.keys());
   // Sort groups so the one with the highest turn_number (latest content) appears first
   groupKeys.sort((a, b) => {
