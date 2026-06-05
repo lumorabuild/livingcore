@@ -185,6 +185,15 @@
   var lastTurnId = 0;
   var isAnimating = false;
 
+  // Re-render server timestamps (UTC) into the viewer's local time, consistently
+  // with live turns.
+  function normalizeTurnTimes() {
+    document.querySelectorAll('.turn-time[data-ts]').forEach(function (el) {
+      var t = formatTime(el.getAttribute('data-ts'));
+      if (t) el.textContent = t;
+    });
+  }
+
   // Read initial state from page
   async function initPolling() {
     var timeline = document.getElementById('dialogue-timeline');
@@ -192,6 +201,8 @@
       var turnId = parseInt(timeline.getAttribute('data-latest-turn-id') || '0');
       lastTurnId = turnId;
     }
+
+    normalizeTurnTimes();
 
     // Animate the initially loaded turns (reuses the SSR elements — no duplicates)
     var nowContainer = document.getElementById('now-turns-container');
@@ -379,34 +390,38 @@
     });
   }
 
+  // Builds a live turn with the EXACT same markup/style as the server-rendered
+  // CompactDialogueTurn (left accent bar, name + husband/wife + time, reasoning
+  // toggle) so the feed is one consistent chat — not two different looks.
   function createTurnElement(turn, index) {
     var speaker = turn.speaker || 'kevin';
     var isKevin = speaker === 'kevin';
-    var faceSize = 32;
     var color = isKevin ? '#4ecdc4' : '#ff6b9d';
     var name = isKevin ? 'Kevin' : 'Jenny';
     var badge = isKevin ? 'husband' : 'wife';
-    var createdAt = turn.created_at ? formatTime(turn.created_at) : '';
+    var iso = turn.created_at || '';
+    var timeText = iso ? formatTime(iso) : '';
+    var thoughts = turn.thoughts || turn.thought_process || '';
 
     var div = document.createElement('div');
-    div.className = 'dialogue-turn';
-    div.style.animationDelay = '0s';
+    div.className = 'dialogue-turn-turn';
+    div.setAttribute('data-speaker', speaker);
+    div.style.borderLeft = '2px solid ' + color;
+    div.style.paddingLeft = '8px';
 
-    div.innerHTML =
-      '<div class="flex items-start gap-2 mb-2 pt-2 border-t border-[#2f3336] first:border-0">' +
-        '<div class="flex-shrink-0 mt-0.5" style="width:' + faceSize + 'px;height:' + faceSize + 'px;">' +
-          getAgentSvg(speaker, faceSize) +
-        '</div>' +
-        '<div class="flex-1 min-w-0">' +
-          '<div class="flex items-center gap-1.5 mb-1">' +
-            '<span class="text-xs font-semibold" style="color:' + color + '">' + name + '</span>' +
-            '<span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">' + badge + '</span>' +
-            '<span class="text-[10px] text-[#71767b] ml-auto">' + createdAt + '</span>' +
-          '</div>' +
-          '<div class="text-xs text-[#e7e9ea] leading-relaxed turn-content"></div>' +
-        '</div>' +
-      '</div>';
-
+    var html =
+      '<div class="flex items-center gap-1.5 mb-1">' +
+        '<span class="text-[10px] font-semibold" style="color:' + color + '">' + name + '</span>' +
+        '<span class="text-[9px] text-[#71767b]">' + badge + '</span>' +
+        '<span class="text-[9px] text-[#71767b] turn-time" data-ts="' + escapeHtml(iso) + '">' + timeText + '</span>' +
+      '</div>' +
+      '<p class="text-xs text-[#b0b3b8] leading-relaxed turn-content"></p>';
+    if (thoughts) {
+      html +=
+        '<button onclick="toggleThoughts(this)" class="text-[9px] text-[#71767b] hover:text-[#e7e9ea] mt-1">🔍 show reasoning</button>' +
+        '<div class="thoughts-content mt-1 hidden"><p class="text-[10px] text-[#71767b] italic leading-relaxed whitespace-pre-wrap">' + escapeHtml(thoughts) + '</p></div>';
+    }
+    div.innerHTML = html;
     return div;
   }
 
@@ -481,7 +496,14 @@
 
   function formatTime(dateStr) {
     try {
-      var d = new Date(dateStr);
+      if (!dateStr) return '';
+      // D1 timestamps look like "2026-06-05 10:54:00" (UTC, no zone marker).
+      // Normalize so the browser parses them as UTC, then show in the viewer's local time.
+      var s = String(dateStr).trim();
+      if (s.indexOf('T') === -1) s = s.replace(' ', 'T');
+      if (!/(Z|[+\-]\d\d:?\d\d)$/.test(s)) s += 'Z';
+      var d = new Date(s);
+      if (isNaN(d.getTime())) return '';
       var hours = d.getHours();
       var mins = d.getMinutes();
       var ampm = hours >= 12 ? 'PM' : 'AM';

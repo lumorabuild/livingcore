@@ -473,7 +473,7 @@ function CompactDialogueTurn({ turn, index, isLast, topFirst }: { turn: any; ind
       <div class="flex items-center gap-1.5 mb-1">
         <span class="text-[10px] font-semibold" style={`color:${color}`}>{name}</span>
         <span class="text-[9px] text-[#71767b]">{isKevin ? 'husband' : 'wife'}</span>
-        <span class="text-[9px] text-[#71767b]">{new Date(turn.created_at).toLocaleTimeString()}</span>
+        <span class="text-[9px] text-[#71767b] turn-time" data-ts={turn.created_at}>{new Date(turn.created_at).toLocaleTimeString()}</span>
         {isLast && <span class="text-[9px] text-[#71767b] animate-pulse">▍</span>}
       </div>
       <p class="text-xs text-[#b0b3b8] leading-relaxed">{turn.content}</p>
