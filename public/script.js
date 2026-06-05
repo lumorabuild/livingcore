@@ -190,26 +190,19 @@
             lastTurnId = maxId;
           }
 
-          // Append new turns to NOW section
+          // Append new turns to the NOW feed
           var nowContainer = document.getElementById('now-turns-container');
-          var turnCountEl = document.getElementById('now-turn-count');
           var timeline = document.getElementById('dialogue-timeline');
 
           if (nowContainer && data.new_turns.length > 0) {
             isAnimating = true;
-
-            // Update turn count in the header
-            if (turnCountEl) {
-              var currentCount = nowContainer.querySelectorAll('.dialogue-turn').length;
-              turnCountEl.textContent = (currentCount + data.new_turns.length) + ' turns';
-            }
 
             // Update timeline data attribute
             if (timeline) {
               timeline.setAttribute('data-turn-count', String(data.dialogue_turns));
             }
 
-            // Show new turns one by one with typing effect
+            // Show new turns one by one with typing effect (feed trims to last 5)
             await showNewTurnsOneByOne(nowContainer, data.new_turns);
 
             isAnimating = false;
@@ -251,8 +244,11 @@
       // Append to container (hidden initially)
       turnEl.style.opacity = '0';
       turnEl.style.transform = 'translateY(8px)';
-      turnEl.style.transition = 'opacity 0.8s ease-out, transform 0.8s ease-out';
+      turnEl.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
       container.appendChild(turnEl);
+
+      // Keep the live feed to the last 5 messages only
+      trimContainer(container, 5);
 
       // Update agent status bar to show who's speaking
       updateAgentStatus(turn.speaker);
@@ -260,13 +256,49 @@
       // Trigger reflow for CSS transition
       turnEl.offsetHeight;
 
-      // Fade in with 1.5s transition
+      // Fade the bubble in
       turnEl.style.opacity = '1';
       turnEl.style.transform = 'translateY(0)';
 
-      // Wait for turn to display before showing the next one
-      await sleep(5000); // 5 seconds between turns
+      // Then type the message out, character by character
+      var contentEl = turnEl.querySelector('.turn-content');
+      await typeText(contentEl, turn.content || '', 14);
+
+      // Small breath before the next person replies
+      await sleep(1400);
     }
+  }
+
+  // Keep only the last `max` turn elements in a container
+  function trimContainer(container, max) {
+    while (container.children.length > max) {
+      container.removeChild(container.firstChild);
+    }
+  }
+
+  // Typewriter effect — types `text` into `el` one character at a time.
+  // Uses textContent so any HTML in the message is rendered safely as text.
+  function typeText(el, text, speed) {
+    return new Promise(function (resolve) {
+      if (!el) { resolve(); return; }
+      var i = 0;
+      el.textContent = '';
+      var cursor = document.createElement('span');
+      cursor.className = 'type-cursor animate-pulse';
+      cursor.style.opacity = '0.7';
+      cursor.textContent = '▍';
+      el.appendChild(cursor);
+      var iv = setInterval(function () {
+        i++;
+        el.textContent = text.slice(0, i);
+        el.appendChild(cursor);
+        if (i >= text.length) {
+          clearInterval(iv);
+          if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+          resolve();
+        }
+      }, speed);
+    });
   }
 
   function createTurnElement(turn, index) {
@@ -275,7 +307,7 @@
     var faceSize = 32;
     var color = isKevin ? '#4ecdc4' : '#ff6b9d';
     var name = isKevin ? 'Kevin' : 'Jenny';
-    var badge = isKevin ? 'Grounder' : 'Weaver';
+    var badge = isKevin ? 'husband' : 'wife';
     var createdAt = turn.created_at ? formatTime(turn.created_at) : '';
 
     var div = document.createElement('div');
@@ -293,7 +325,7 @@
             '<span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">' + badge + '</span>' +
             '<span class="text-[10px] text-[#71767b] ml-auto">' + createdAt + '</span>' +
           '</div>' +
-          '<div class="text-xs text-[#e7e9ea] leading-relaxed">' + escapeHtml(turn.content) + '</div>' +
+          '<div class="text-xs text-[#e7e9ea] leading-relaxed turn-content"></div>' +
         '</div>' +
       '</div>';
 

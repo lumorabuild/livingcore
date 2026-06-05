@@ -330,22 +330,28 @@ function DialogueTimeline({ turns }: { turns: any[] }) {
     <div class="space-y-4" id="dialogue-timeline"
       data-turn-count={turns.length}
       data-latest-turn-id={latestTurnId}>
-      {/* Most recent group - shown expanded with typing animation */}
-      {lastGroup && (
-        <div id="now-section" class="bg-[#141a21] rounded-xl border border-[#2f3336] overflow-hidden"
-          data-turn-group={lastGroupKey}
-          data-turn-count={turns.length}>
-          <div class="px-4 py-2 bg-[#1a1f2e] border-b border-[#2f3336] flex items-center justify-between">
-            <span class="text-[11px] font-medium text-[#e7e9ea]">Now</span>
-            <span id="now-turn-count" class="text-[9px] text-[#71767b]">{lastGroup.length} turns</span>
+      {/* Live "Now" feed — only the last 5 messages, newest at the bottom */}
+      {lastGroup && (() => {
+        const liveTurns = lastGroup.slice(-5);
+        return (
+          <div id="now-section" class="bg-[#141a21] rounded-xl border border-[#2f3336] overflow-hidden"
+            data-turn-group={lastGroupKey}
+            data-turn-count={turns.length}>
+            <div class="px-4 py-2 bg-[#1a1f2e] border-b border-[#2f3336] flex items-center justify-between">
+              <span class="text-[11px] font-medium text-[#e7e9ea] flex items-center gap-1.5">
+                <span class="inline-block w-1.5 h-1.5 rounded-full bg-[#4ecdc4] animate-pulse"></span>
+                Now
+              </span>
+              <span class="text-[9px] text-[#71767b]">live</span>
+            </div>
+            <div id="now-turns-container" class="p-3 space-y-2">
+              {liveTurns.map((turn: any, i: number) => (
+                <CompactDialogueTurn key={turn.id || i} turn={turn} index={i} isLast={i === liveTurns.length - 1} topFirst={true} />
+              ))}
+            </div>
           </div>
-          <div id="now-turns-container" class="p-3 space-y-2">
-            {lastGroup.map((turn: any, i: number) => (
-              <CompactDialogueTurn key={turn.id || i} turn={turn} index={i} isLast={i === lastGroup.length - 1} topFirst={true} />
-            ))}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Older groups - collapsed summary */}
       {groupKeys.slice(1, 5).map((g) => {

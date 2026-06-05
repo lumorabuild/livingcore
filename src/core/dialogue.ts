@@ -68,17 +68,26 @@ function readableTopic(text: string): string {
   return firstSentence;
 }
 
-// A short, human gist of the topic for inline reference (a few keywords)
-const TOPIC_NOISE = new Set(['rss', 'today', 'daily', 'digest', 'items', 'item', 'selected', 'discussion', 'highlights', 'http', 'https', 'www', 'com']);
-function topicGist(text: string): string {
-  const kws = extractKeywords(text).filter(w => !TOPIC_NOISE.has(w));
-  return kws.slice(0, 3).join(', ');
-}
-
 // Trim a memory's content to a short, readable fragment
 function shorten(s: string, n: number = 55): string {
   const t = readableTopic(s);
   return t.length > n ? t.slice(0, n).trim() + '…' : t;
+}
+
+// Pick a clean, human-readable memory to reference. Skips internal artifacts
+// (concept summaries, hypothesis "… are related" templates) and varies the
+// choice so the agents don't quote the same packet every time.
+function pickCleanMemory(scored: { packet: ThoughtPacket; score: number }[]): string | null {
+  const nice = scored.filter(s => {
+    const c = (s.packet.content || '').trim();
+    if (c.startsWith('Concept:')) return false;
+    if (c.includes('are related: both provide context')) return false;
+    if (s.packet.type === 'hypothesis') return false;
+    return c.length > 12;
+  });
+  if (nice.length === 0) return null;
+  const chosen = pick(nice.slice(0, 3));
+  return shorten(chosen.packet.content, 55);
 }
 
 // ── Kevin: The Grounder (dialogue mode) ──
@@ -90,7 +99,6 @@ function kevinSpeak(
   recentTurns: dialogueOps.DialogueTurn[]
 ): { content: string; thoughts: string; relatedIds: string[] } {
   const topic = readableTopic(triggerText);
-  const gist = topicGist(triggerText);
   const pet = pick(KEVIN_PET_NAMES);
   const lines: string[] = [];
   const relatedIds: string[] = [];
@@ -127,32 +135,31 @@ function kevinSpeak(
     `Give me a beat with it... okay.`,
   ]));
 
-  // 2) Topic reaction — reference what was actually said
+  // 2) Reaction — conversational, never parroting the input's words
   lines.push(pick([
-    `What steadies me about ${gist ? `"${gist}"` : 'this'} is the part we can actually stand on.`,
-    `There's a real thread in ${gist ? `${gist}` : 'this'} — not just noise, I think.`,
-    `The thing about ${gist || 'it'} is how it rhymes with stuff we've already lived.`,
-    `I want to be careful with ${gist || 'this'} — careful, not cold, you know me.`,
-    `Part of me wants to slow down and really weigh ${gist || 'it'} before we run.`,
-    `It's the kind of thing that looks simple until you lean on it.`,
+    `What steadies me here is the part we can actually stand on.`,
+    `There's a real thread in this — not just noise, I think.`,
+    `What gets me is how it rhymes with stuff we've already lived.`,
+    `I want to be careful with it — careful, not cold, you know me.`,
+    `Part of me wants to slow down and weigh it properly before we run.`,
+    `It looks simple until you lean on it, doesn't it?`,
+    `There's more sitting underneath this than it lets on.`,
   ]));
 
-  // 3) Memory tie-in — soft, human, no percentages
-  if (top.length > 0) {
-    const m = shorten(top[0].packet.content, 60);
-    if (m) {
-      lines.push(pick([
-        `It reminds me of when we noticed "${m}" — feels connected.`,
-        `We've brushed past this before: "${m}".`,
-        `There's an echo of something we kept — "${m}".`,
-        `Doesn't it sit close to "${m}"?`,
-      ]));
-    }
-  } else {
+  // 3) Memory tie-in — clean, varied, and only sometimes (so it isn't every line)
+  const mem = pickCleanMemory(scored);
+  if (mem && maybe(0.6)) {
+    lines.push(pick([
+      `It reminds me of when we noticed "${mem}".`,
+      `We've brushed past this before — "${mem}".`,
+      `There's an echo of something we kept: "${mem}".`,
+      `Doesn't it sit close to "${mem}"?`,
+    ]));
+  } else if (!mem && top.length === 0) {
     lines.push(pick([
       `This feels like fresh ground for us, honestly.`,
-      `I don't think we've walked here before, which is kind of exciting.`,
-      `Nothing in our memory quite matches it yet — blank page.`,
+      `I don't think we've walked here before — kind of exciting.`,
+      `Nothing in our memory quite matches it yet. Blank page.`,
     ]));
   }
 
@@ -189,7 +196,6 @@ function jennySpeak(
   recentTurns: dialogueOps.DialogueTurn[]
 ): { content: string; thoughts: string; relatedIds: string[] } {
   const topic = readableTopic(triggerText);
-  const gist = topicGist(triggerText);
   const pet = pick(JENNY_PET_NAMES);
   const lines: string[] = [];
   const relatedIds: string[] = [];
@@ -226,30 +232,28 @@ function jennySpeak(
     `Oh, now you've done it — my mind's already off and running.`,
   ]));
 
-  // 2) Imaginative reaction — tied to the real topic
+  // 2) Imaginative reaction — conversational, never parroting the input's words
   lines.push(pick([
-    `What if ${gist ? `"${gist}"` : 'this'} is really about something we haven't named yet, just wearing a different coat?`,
-    `I keep picturing ${gist || 'it'} as a doorway, not a wall.`,
-    `${capitalize(gist || 'It')} feels like it wants to connect to something tender underneath.`,
+    `What if this is really about something we haven't named yet, just wearing a different coat?`,
+    `I keep picturing it as a doorway, not a wall.`,
+    `It feels like it wants to connect to something tender underneath.`,
     `Everything's a thread to me, and this one's pulling toward something warm.`,
-    `There's a pattern hiding in ${gist || 'this'} — I can almost taste it.`,
-    `It's funny how ${gist || 'this'} hums next to the other things we love.`,
+    `There's a pattern hiding in here — I can almost taste it.`,
+    `It's funny how this hums next to the other things we love.`,
   ]));
 
-  // 3) Memory weave — soft reference, no stat dumps
-  if (top.length > 0) {
-    const m = shorten(top[0].packet.content, 60);
-    if (m) {
-      lines.push(pick([
-        `It braids right into "${m}", don't you think?`,
-        `I want to tie it to "${m}" — they belong in the same story.`,
-        `Remember "${m}"? This feels like its cousin.`,
-        `There's a line running from here to "${m}".`,
-      ]));
-    }
-  } else {
+  // 3) Memory weave — clean, varied, and only sometimes
+  const mem = pickCleanMemory(scored);
+  if (mem && maybe(0.6)) {
     lines.push(pick([
-      `Nothing in our web catches it yet — but the best patterns are the ones you don't see coming.`,
+      `It braids right into "${mem}", don't you think?`,
+      `I want to tie it to "${mem}" — same story, different page.`,
+      `Remember "${mem}"? This feels like its cousin.`,
+      `There's a line running from here to "${mem}".`,
+    ]));
+  } else if (!mem && top.length === 0) {
+    lines.push(pick([
+      `Nothing in our web catches it yet — but the best patterns sneak up on you.`,
       `It's a brand new color for us, and I'm a little in love with it.`,
       `Fresh territory, ${pet}. Those are my favorite kind.`,
     ]));
