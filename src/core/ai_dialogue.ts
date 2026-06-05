@@ -177,12 +177,18 @@ export async function kevinAiSpeak(
   const userPrompt = `${buildConversationContext(recentTurns)}${buildMemoryContext(packets)}\nKevin, respond to this: "${(triggerText || '').slice(0, 200)}"`;
 
   try {
+    // Static system prompt FIRST, dynamic user message LAST, and no timestamps —
+    // so the system-prompt prefix is identical every call and can be prompt-cached.
+    // x-session-affinity routes Kevin's calls to the same backend to maximize cache
+    // hits (cached input tokens bill at a discounted rate on models that support it).
     const response = await (ai as any).run(KEVIN_MODEL, {
       messages: [
         { role: 'system', content: KEVIN_SYSTEM },
         { role: 'user', content: userPrompt },
       ],
       max_tokens: MAX_TOKENS_PER_CALL,
+    }, {
+      extraHeaders: { 'x-session-affinity': 'kevin-livingcore' },
     });
 
     const text: string = (response as any)?.response || (response as any)?.result?.response || '';
@@ -231,12 +237,15 @@ export async function jennyAiSpeak(
   const userPrompt = `${buildConversationContext(recentTurns)}${buildMemoryContext(packets)}\nJenny, respond to this: "${(triggerText || '').slice(0, 200)}"`;
 
   try {
+    // Same prompt-caching setup as Kevin: static prefix first, affinity-routed.
     const response = await (ai as any).run(JENNY_MODEL, {
       messages: [
         { role: 'system', content: JENNY_SYSTEM },
         { role: 'user', content: userPrompt },
       ],
       max_tokens: MAX_TOKENS_PER_CALL,
+    }, {
+      extraHeaders: { 'x-session-affinity': 'jenny-livingcore' },
     });
 
     const text: string = (response as any)?.response || (response as any)?.result?.response || '';
