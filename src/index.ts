@@ -85,11 +85,19 @@ app.all('*', (c) => {
 });
 
 // ── SCHEDULED EVENT HANDLER ──
-// Cloudflare calls this for cron triggers (now every 1 min for testing)
-
-export async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledController) {
-  // Cron may use the AI brain (capped), with budget reserved for inbox testing.
-  ctx.waitUntil(runCronCycle(env.DB, env.AI));
+// NOTE: this MUST be a method on the default export (see bottom of file). A bare
+// `export function scheduled` is NOT invoked by the Workers runtime for cron —
+// only `default.fetch` / `default.scheduled` are. That mistake silently stopped
+// the autonomous conversation.
+async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledController) {
+  // env.AI is passed but only USED when ai_dialogue.ts AI_ENABLED is true. While it's
+  // false (the default), every cron cycle is the free symbolic voice — zero neurons,
+  // zero charge. Flip AI_ENABLED to re-enable the brain everywhere; no other change needed.
+  const work = runCronCycle(env.DB, env.AI);
+  // Prefer waitUntil, but also await so the cycle reliably completes (local dev's
+  // scheduled emulation doesn't always provide a usable waitUntil).
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(work);
+  await work;
 }
 
 // ── Shared cron logic ──
@@ -230,4 +238,9 @@ async function checkPendingRules(db: D1Database) {
   }
 }
 
-export default app;
+// Cloudflare invokes handlers as methods on the DEFAULT export. We expose Hono's
+// fetch AND the cron scheduled handler here so both HTTP and cron actually run.
+export default {
+  fetch: app.fetch,
+  scheduled,
+};

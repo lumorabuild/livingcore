@@ -13,6 +13,13 @@
 const KEVIN_MODEL = '@cf/ibm-granite/granite-4.0-h-micro';
 const JENNY_MODEL = '@cf/zai-org/glm-4.7-flash';
 
+// ── Master AI switch ──
+// FALSE = Kevin & Jenny run entirely on the free symbolic voice. Zero Workers AI
+// calls, so zero neurons spent and ZERO possibility of an extra charge — safe to
+// run 24/7. Flip to TRUE later if you decide to spend your daily neuron allowance;
+// all the budget caps below then apply.
+const AI_ENABLED = false;
+
 // ── Hard budget caps (combined across both agents) ──
 const MAX_TOKENS_PER_CALL = 150;     // enforced on every completion
 const DAILY_TOKEN_BUDGET = 80000;    // hard stop — 80% of the 100k/day pool
@@ -153,6 +160,11 @@ export async function kevinAiSpeak(
   recentTurns: any[],
   source: string = 'manual'
 ): Promise<{ content: string; thoughts: string; usedAi: boolean }> {
+  // Master switch off → never touch Workers AI (zero neurons, zero charge).
+  if (!AI_ENABLED) {
+    return { content: '', thoughts: 'AI is off — using the free symbolic voice.', usedAi: false };
+  }
+
   const gate = await budgetAllows(db, source);
   if (!gate.allowed) {
     return {
@@ -202,6 +214,11 @@ export async function jennyAiSpeak(
   recentTurns: any[],
   source: string = 'manual'
 ): Promise<{ content: string; thoughts: string; usedAi: boolean }> {
+  // Master switch off → never touch Workers AI (zero neurons, zero charge).
+  if (!AI_ENABLED) {
+    return { content: '', thoughts: 'AI is off — using the free symbolic voice.', usedAi: false };
+  }
+
   const gate = await budgetAllows(db, source);
   if (!gate.allowed) {
     return {
