@@ -101,68 +101,74 @@ async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledCon
 }
 
 // ── Shared cron logic ──
-// KEY FIX: RSS → conversation are CHAINED, not parallel.
-// One continuous conversation per cron cycle — not two separate ones.
+// Conversations are NOT capped at one short burst per cycle. A topic keeps going
+// across cron cycles (same turn_group) — building for many turns over many minutes,
+// like a real couple — until it reaches a soft cap or naturally winds down, then they
+// move to a fresh topic. Each cycle only adds a few turns, so a single cron invocation
+// stays fast (no Worker timeout) and the data grows at a steady, bounded rate.
+
+const TURNS_PER_CYCLE = 3;     // turns added to the live conversation each cron tick
+const CONVO_SOFT_CAP = 36;     // a topic can run this many turns before they move on
+const KEEP_TALKING_CHANCE = 0.85; // each cycle, odds they stay on the same topic
 
 async function runCronCycle(db: D1Database, ai?: Ai) {
   try {
     // Spread the limited AI brain across the whole day instead of burning it all in
     // the first couple of hours: only ~1 in 4 autonomous cycles reaches for the model.
-    // The hard daily budget in ai_dialogue still applies — this just distributes it so
-    // the couple sounds alive (with occasional real brain) around the clock. The rest
-    // of the time they use the warm symbolic voice, which is free and unlimited.
+    // The hard daily budget in ai_dialogue still applies. The rest of the time they
+    // use the warm symbolic voice, which is free and unlimited.
     const cycleAi = ai && Math.random() < 0.25 ? ai : undefined;
 
-    // Step 1: Only check the RSS feeds occasionally (~every 20 min at a 2-min cadence)
-    // so we don't hammer 18 external feeds every couple of minutes. Most cycles the
-    // couple simply talks — about their life or something they remember.
+    // Occasionally check the RSS feeds (~every 20 min). Fresh news starts a new topic
+    // thread; we don't hammer 18 external feeds every couple of minutes.
     let rssResult: any = { turn_group: null, discussion_turns: 0 };
     if (Math.random() < 0.1) {
       rssResult = await rssEngine.processRSSFeeds(db);
     }
 
-    // Step 2: CHAIN from where RSS left off — same turn_group
-    // This creates ONE flowing conversation instead of two separate ones
-    let chainResult = false;
+    let outcome: string;
     if (rssResult.turn_group && rssResult.discussion_turns > 0) {
-      // Get the newest turn in the RSS discussion to continue from it
-      const groupTurns = await dialogueOps.getDialogueTurns(db, {
-        group: rssResult.turn_group,
-        limit: 10
-      });
-
-      if (groupTurns.length > 0) {
-        // groupTurns[0] is newest (DESC ordering)
-        const newestTurn = groupTurns[0];
-        const nextSpeaker = newestTurn.speaker === 'kevin' ? 'jenny' : 'kevin';
-
-        await dialogueEngine.continueDialogueChain(
-          db,
-          newestTurn.content,
-          nextSpeaker,
-          rssResult.turn_group,
-          3,  // 3 additional turns → total: 6 turns in one continuous conversation
-          cycleAi,
-          'cron'
-        );
-        chainResult = true;
-      }
+      // Fresh news → extend the brand-new news thread a little this cycle.
+      await extendConversation(db, rssResult.turn_group, cycleAi);
+      outcome = 'news';
     } else {
-      // No new RSS items — generate a standalone conversation from memory
-      chainResult = await generateStandaloneConversation(db, cycleAi);
+      // Find the conversation in progress (the newest turn's group).
+      const latest = await dialogueOps.getDialogueTurns(db, { limit: 1 });
+      const activeGroup = latest.length > 0 ? latest[0].turn_group : null;
+      let count = 0;
+      if (activeGroup) {
+        const groupTurns = await dialogueOps.getDialogueTurns(db, { group: activeGroup, limit: CONVO_SOFT_CAP + 10 });
+        count = groupTurns.length;
+      }
+
+      // Keep talking on the same topic unless it has run its course (soft cap) or it
+      // naturally winds down (random) — then start a fresh topic.
+      if (activeGroup && count < CONVO_SOFT_CAP && Math.random() < KEEP_TALKING_CHANCE) {
+        await extendConversation(db, activeGroup, cycleAi);
+        outcome = 'continued';
+      } else {
+        await generateStandaloneConversation(db, cycleAi);
+        outcome = 'new';
+      }
     }
 
-    // Step 3: Check pending rule proposals
     await checkPendingRules(db).catch(() => {});
 
-    return {
-      success: true,
-      rss: rssResult,
-      conversation_generated: chainResult,
-    };
+    return { success: true, outcome };
   } catch (err) {
     return { success: false, error: String(err) };
   }
+}
+
+// Add a few more turns to an existing conversation thread (same turn_group).
+async function extendConversation(db: D1Database, turnGroup: string, ai?: Ai): Promise<void> {
+  const groupTurns = await dialogueOps.getDialogueTurns(db, { group: turnGroup, limit: 5 });
+  if (groupTurns.length === 0) return;
+  const newest = groupTurns[0]; // DESC ordering → newest first
+  const nextSpeaker = newest.speaker === 'kevin' ? 'jenny' : 'kevin';
+  await dialogueEngine.continueDialogueChain(
+    db, newest.content, nextSpeaker, turnGroup, TURNS_PER_CYCLE, ai, 'cron'
+  ).catch(() => {});
 }
 
 // ── Standalone conversation (when no new RSS items) ──
