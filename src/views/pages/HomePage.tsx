@@ -115,24 +115,24 @@ export function HomePage({ data }: { data: HomePageData }) {
 // ── Compact Agent Status Bar (replaces the big card layout) ──
 
 function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }: any) {
-  // Find each agent's most recent turn independently
+  // dialogueTurns arrives NEWEST-FIRST (id DESC), so index 0 is the latest turn.
   const allTurns: any[] = dialogueTurns || [];
-  const overallLastTurn = allTurns[allTurns.length - 1];
+  const overallLastTurn = allTurns[0];
   const lastSpeaker = overallLastTurn?.speaker || 'kevin';
   const kevinSpeaking = lastSpeaker === 'kevin';
   const jennySpeaking = lastSpeaker === 'jenny';
 
-  // Detect moods from each agent's last message
-  const kevinLastTurn = [...allTurns].reverse().find((t: any) => t.speaker === 'kevin');
-  const jennyLastTurn = [...allTurns].reverse().find((t: any) => t.speaker === 'jenny');
+  // Each agent's most recent message (first match in a newest-first list)
+  const kevinLastTurn = allTurns.find((t: any) => t.speaker === 'kevin');
+  const jennyLastTurn = allTurns.find((t: any) => t.speaker === 'jenny');
   const kevinMood = detectMood(kevinLastTurn?.content || '');
   const jennyMood = detectMood(jennyLastTurn?.content || '');
 
   const memories = packets.filter((p: any) => p.type === 'observation' || p.type === 'experience').length;
   const concepts = packets.filter((p: any) => p.type === 'concept').length;
 
-  // Turn sequence: if last 3+ turns, show the pattern
-  const recentSpeakers = dialogueTurns.slice(-4).map((t: any) => t.speaker);
+  // Recent turn pattern, in chronological (oldest→newest) order
+  const recentSpeakers = allTurns.slice(0, 4).reverse().map((t: any) => t.speaker);
   const pattern = recentSpeakers.join(' → ') || '';
 
   return (
@@ -141,7 +141,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
       <div class="flex items-center justify-between mb-2">
         {/* Kevin */}
         <div class="flex items-center gap-2 min-w-0">
-          <div class={`agent-indicator relative ${kevinSpeaking ? 'active' : ''} flex-shrink-0`}
+          <div id="kevin-indicator" class={`agent-indicator relative ${kevinSpeaking ? 'active' : ''} flex-shrink-0`}
                style={kevinSpeaking ? `border-bottom:2px solid #4ecdc4;padding-bottom:2px;` : ''}>
             <KevinFace mood={kevinMood} speaking={kevinSpeaking} size={36} showLabel={false} />
           </div>
@@ -150,7 +150,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
               <span class="text-xs font-semibold text-[#4ecdc4]">Kevin</span>
               <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">husband</span>
             </div>
-            <div class="flex items-center gap-1 mt-0.5">
+            <div id="kevin-status" class="flex items-center gap-1 mt-0.5">
               {kevinSpeaking ? (
                 <>
                   <span class="text-[10px] text-[#4ecdc4] font-medium">speaking</span>
@@ -164,7 +164,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
         </div>
 
         {/* Divider */}
-        <div class="text-[#2f3336] text-[10px] px-1 flex-shrink-0">
+        <div id="agent-divider" class="text-[#2f3336] text-[10px] px-1 flex-shrink-0">
           {kevinSpeaking ? '►' : jennySpeaking ? '◄' : '↔'}
         </div>
 
@@ -175,7 +175,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
               <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">wife</span>
               <span class="text-xs font-semibold text-[#ff6b9d]">Jenny</span>
             </div>
-            <div class="flex items-center gap-1 mt-0.5 justify-end">
+            <div id="jenny-status" class="flex items-center gap-1 mt-0.5 justify-end">
               {jennySpeaking ? (
                 <>
                   <ThinkingBars color="#ff6b9d" />
@@ -186,7 +186,7 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
               )}
             </div>
           </div>
-          <div class={`agent-indicator relative ${jennySpeaking ? 'active' : ''} order-1 flex-shrink-0`}
+          <div id="jenny-indicator" class={`agent-indicator relative ${jennySpeaking ? 'active' : ''} order-1 flex-shrink-0`}
                style={jennySpeaking ? `border-bottom:2px solid #ff6b9d;padding-bottom:2px;` : ''}>
             <JennyFace mood={jennyMood} speaking={jennySpeaking} size={36} showLabel={false} />
           </div>
@@ -468,6 +468,7 @@ function CompactDialogueTurn({ turn, index, isLast, topFirst }: { turn: any; ind
 
   return (
     <div class={`dialogue-turn-turn ${topFirst ? 'dialogue-turn-top' : 'dialogue-turn'}`}
+         data-speaker={turn.speaker}
          style={`border-left:2px solid ${color}; padding-left:8px;`}>
       <div class="flex items-center gap-1.5 mb-1">
         <span class="text-[10px] font-semibold" style={`color:${color}`}>{name}</span>

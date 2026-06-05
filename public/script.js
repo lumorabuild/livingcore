@@ -165,6 +165,8 @@
       el.style.transform = 'translateY(0)';
 
       if (isNewest) {
+        // Sync the top bar to whoever speaks this (newest) line while it types
+        updateAgentStatus(el.getAttribute('data-speaker'));
         var p = el.querySelector('p');
         if (p) {
           await typeText(p, p.textContent || '', 14);
@@ -174,6 +176,8 @@
         await sleep(180);
       }
     }
+    // Settled — nobody is actively typing now
+    setAgentsIdle();
   }
 
   // ── Auto-Polling: check for new dialogue turns every 5 seconds ──
@@ -314,6 +318,8 @@
       // Small breath before the next person replies
       await sleep(1400);
     }
+    // Done typing this batch — nobody is speaking now
+    setAgentsIdle();
   }
 
   // Keep only the last `max` turn elements — newest is on top, so drop from the bottom
@@ -404,13 +410,51 @@
     return div;
   }
 
+  // Sync the top status bar to whoever is currently typing.
   function updateAgentStatus(activeSpeaker) {
-    var isKevin = activeSpeaker === 'kevin';
+    setAgentState('kevin', activeSpeaker === 'kevin', '#4ecdc4');
+    setAgentState('jenny', activeSpeaker === 'jenny', '#ff6b9d');
+    var divider = document.getElementById('agent-divider');
+    if (divider) divider.textContent = activeSpeaker === 'kevin' ? '►' : (activeSpeaker === 'jenny' ? '◄' : '↔');
+  }
 
-    // Update the agent bar speaking indicators
-    var kevinStatus = document.querySelector('.flex.items-center.gap-1.mt-0\\.5');
-    // Simple approach: update via the agent bar structure
-    // The agent bar is re-rendered on full page load, so this is a best-effort update
+  // Nobody is typing right now → both listening.
+  function setAgentsIdle() {
+    setAgentState('kevin', false, '#4ecdc4');
+    setAgentState('jenny', false, '#ff6b9d');
+    var divider = document.getElementById('agent-divider');
+    if (divider) divider.textContent = '↔';
+  }
+
+  function thinkingBarsHtml(color) {
+    var bar = '<span class="thinking-bar" style="display:inline-block;width:2px;height:9px;background:' + color + '"></span>';
+    return '<span class="inline-flex items-end gap-0.5">' + bar + bar + bar + '</span>';
+  }
+
+  function setAgentState(who, speaking, color) {
+    var status = document.getElementById(who + '-status');
+    if (status) {
+      if (speaking) {
+        var word = '<span class="text-[10px] font-medium" style="color:' + color + '">speaking</span>';
+        var bars = thinkingBarsHtml(color);
+        // Jenny's row is right-aligned (bars before word); Kevin's is word before bars.
+        status.innerHTML = (who === 'jenny') ? (bars + ' ' + word) : (word + ' ' + bars);
+      } else {
+        status.innerHTML = '<span class="text-[10px] text-[#71767b]">listening</span>';
+      }
+    }
+    var ind = document.getElementById(who + '-indicator');
+    if (ind) {
+      if (speaking) {
+        ind.classList.add('active');
+        ind.style.borderBottom = '2px solid ' + color;
+        ind.style.paddingBottom = '2px';
+      } else {
+        ind.classList.remove('active');
+        ind.style.borderBottom = '';
+        ind.style.paddingBottom = '';
+      }
+    }
   }
 
   function getAgentSvg(speaker, size) {
