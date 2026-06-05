@@ -13,7 +13,7 @@ A lightweight, self-evolving cognitive architecture that runs entirely inside Cl
 
 1. **Thought Packets** — every memory is a simple JSON structure stored in D1
 2. **Workers AI Dialogue** — Kevin and Jenny use real AI models to have genuine conversations
-3. **Rate Limiting** — each agent gets 8 AI calls/day (half the free tier, ~5k neurons), with automatic fallback to symbolic generation
+3. **Token Budget** — combined hard caps of 80,000 tokens/day and 225 messages/day (max_tokens 150/call), with automatic fallback to a warm symbolic voice. Autonomous cron is soft-capped at 80% so live inbox testing always keeps budget in reserve. Daily usage is visible at `/api/ai/usage`.
 4. **Reflective Rewriting** — when new input arrives, agents propose rewrites that improve memory coherence
 5. **Coherence Scoring** — a simple function measures how well each packet fits with its neighbors
 6. **Emergent Concepts** — over many interactions, higher-level abstractions arise naturally

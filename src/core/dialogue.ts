@@ -45,6 +45,42 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// ── Newlywed warmth helpers ──
+// Kevin & Jenny just got married and work as a team. They speak warmly,
+// vary their words, and call each other by affectionate names.
+
+const KEVIN_PET_NAMES = ['honey', 'love', 'Jen', 'babe', 'my love', 'sweetheart'];
+const JENNY_PET_NAMES = ['honey', 'babe', 'Kev', 'love', 'sweetheart', 'my love'];
+
+function maybe(prob: number): boolean {
+  return Math.random() < prob;
+}
+
+// Strip emojis, RSS/digest noise, and return a clean readable snippet of a topic
+function readableTopic(text: string): string {
+  let t = (text || '')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}]/gu, '')
+    .replace(/\b(RSS|Today'?s?|Daily|Digest|highlights?|items?\s+selected\s+for\s+discussion)\b/gi, '')
+    .replace(/\[\d+\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const firstSentence = (t.split(/[.!?\n]/).find(s => s.trim().length > 4) || t).trim();
+  return firstSentence;
+}
+
+// A short, human gist of the topic for inline reference (a few keywords)
+const TOPIC_NOISE = new Set(['rss', 'today', 'daily', 'digest', 'items', 'item', 'selected', 'discussion', 'highlights', 'http', 'https', 'www', 'com']);
+function topicGist(text: string): string {
+  const kws = extractKeywords(text).filter(w => !TOPIC_NOISE.has(w));
+  return kws.slice(0, 3).join(', ');
+}
+
+// Trim a memory's content to a short, readable fragment
+function shorten(s: string, n: number = 55): string {
+  const t = readableTopic(s);
+  return t.length > n ? t.slice(0, n).trim() + '…' : t;
+}
+
 // ── Kevin: The Grounder (dialogue mode) ──
 
 function kevinSpeak(
@@ -53,77 +89,95 @@ function kevinSpeak(
   connections: PacketConnection[],
   recentTurns: dialogueOps.DialogueTurn[]
 ): { content: string; thoughts: string; relatedIds: string[] } {
-  const keywords = extractKeywords(triggerText);
-  const thoughts: string[] = ['🧠 Kevin is processing...'];
+  const topic = readableTopic(triggerText);
+  const gist = topicGist(triggerText);
+  const pet = pick(KEVIN_PET_NAMES);
+  const lines: string[] = [];
+  const relatedIds: string[] = [];
+  const thoughts: string[] = ['🧠 Kevin — grounded, warm, thinking with Jenny'];
 
-  // Find related packets
+  // Find related memories (kept light — no stat dumps in the spoken text)
   const scored = packets
     .map(p => ({ packet: p, score: similarity(triggerText, p.content) }))
     .filter(s => s.score > 0.05)
     .sort((a, b) => b.score - a.score);
-  const topPackets = scored.slice(0, 5);
+  const top = scored.slice(0, 3);
+  top.forEach(s => relatedIds.push(s.packet.id));
 
-  // Build response
-  const lines: string[] = [];
-  const relatedIds: string[] = [];
-
-  if (keywords.length === 0) {
-    lines.push("I'm trying to make sense of this, but I need something more concrete to work with. Could you add more detail?");
-    thoughts.push('⚠ Input has few distinguishing keywords — cannot form strong connections');
+  // Empty / thin input — still answer like a partner, not a parser
+  if (!topic || topic.length < 4) {
+    lines.push(pick([
+      `Hm, I'm not quite catching the thread yet, ${pet}. Say a little more?`,
+      `Give me something to hold onto, ${pet} — what's on your mind?`,
+      `I want to follow you here, love, but I need a bit more to go on.`,
+    ]));
+    thoughts.push('Input too thin to form a grounded response.');
     return { content: lines.join(' '), thoughts: thoughts.join('\n'), relatedIds };
   }
 
-  // Kevin's opening — thoughtful, analytical
-  if (topPackets.length === 0) {
-    lines.push(`Interesting. I don't have any existing memories that relate to "${triggerText.slice(0, 60)}..." — this feels like something new.`);
-    lines.push(`The key terms I noticed are: ${keywords.slice(0, 8).join(', ')}. These don't match anything in my current understanding.`);
-    lines.push(`I'll create a new memory for this so we don't lose it. Jenny may see connections I'm missing.`);
-    thoughts.push(`Extracted ${keywords.length} key terms: ${keywords.join(', ')}`);
-    thoughts.push('No matching packets found — will create new observation');
+  // 1) Opener — varied, affectionate
+  lines.push(pick([
+    `${capitalize(pet)}, I keep coming back to this one.`,
+    `Mm. Let me sit with this for a second.`,
+    `Okay, you've got me thinking now.`,
+    `I love that you brought this up, ${pet}.`,
+    `Here's the honest version of what's in my head.`,
+    `Alright — let me try to ground us a little.`,
+    `Funny, I was just turning something like this over.`,
+    `Give me a beat with it... okay.`,
+  ]));
+
+  // 2) Topic reaction — reference what was actually said
+  lines.push(pick([
+    `What steadies me about ${gist ? `"${gist}"` : 'this'} is the part we can actually stand on.`,
+    `There's a real thread in ${gist ? `${gist}` : 'this'} — not just noise, I think.`,
+    `The thing about ${gist || 'it'} is how it rhymes with stuff we've already lived.`,
+    `I want to be careful with ${gist || 'this'} — careful, not cold, you know me.`,
+    `Part of me wants to slow down and really weigh ${gist || 'it'} before we run.`,
+    `It's the kind of thing that looks simple until you lean on it.`,
+  ]));
+
+  // 3) Memory tie-in — soft, human, no percentages
+  if (top.length > 0) {
+    const m = shorten(top[0].packet.content, 60);
+    if (m) {
+      lines.push(pick([
+        `It reminds me of when we noticed "${m}" — feels connected.`,
+        `We've brushed past this before: "${m}".`,
+        `There's an echo of something we kept — "${m}".`,
+        `Doesn't it sit close to "${m}"?`,
+      ]));
+    }
   } else {
-    const best = topPackets[0];
-    relatedIds.push(best.packet.id);
-    const matchPct = Math.round(best.score * 100);
-
-    if (matchPct > 30) {
-      lines.push(`This resonates strongly with something I already know. "${best.packet.content.slice(0, 80)}..." — the overlap is ${matchPct}%.`);
-      lines.push(`It's consistent with what we've observed before. I'd say this reinforces an existing pattern rather than adding something entirely new.`);
-      thoughts.push(`Best match: "${best.packet.content.slice(0, 60)}..." (${matchPct}% similarity)`);
-    } else if (matchPct > 10) {
-      lines.push(`There's a faint connection to an existing memory: "${best.packet.content.slice(0, 60)}..." — about ${matchPct}% overlap.`);
-      lines.push(`Not a strong match, but the shared keywords (${keywords.slice(0, 5).join(', ')}) suggest a distant family resemblance.`);
-      lines.push(`I'll note this as a loose connection and keep watching for stronger patterns.`);
-      thoughts.push(`Weak match: "${best.packet.content.slice(0, 60)}..." (${matchPct}% similarity)`);
-    } else {
-      lines.push(`Hmm. I can see a whisper of connection to "${best.packet.content.slice(0, 50)}..." but it's barely there — just ${matchPct}% overlap.`);
-      lines.push(`This might be something genuinely new, or it might be related in a way I can't see yet. Jenny's better at finding those hidden links.`);
-      thoughts.push(`Marginal match: "${best.packet.content.slice(0, 60)}..." (${matchPct}% similarity)`);
-    }
-
-    // Check for contradictions
-    if (topPackets.length >= 2) {
-      const second = topPackets[1];
-      if (Math.abs(best.score - second.score) < 0.05) {
-        lines.push(`I notice that two different memories have almost equal relevance to this — "${best.packet.content.slice(0, 30)}..." and "${second.packet.content.slice(0, 30)}...". That ambiguity makes me cautious.`);
-        thoughts.push('⚠ Ambiguous — two packets with near-equal relevance scores');
-      }
-    }
-
-    // Add related packet IDs
-    topPackets.slice(0, 3).forEach(p => {
-      if (!relatedIds.includes(p.packet.id)) relatedIds.push(p.packet.id);
-    });
+    lines.push(pick([
+      `This feels like fresh ground for us, honestly.`,
+      `I don't think we've walked here before, which is kind of exciting.`,
+      `Nothing in our memory quite matches it yet — blank page.`,
+    ]));
   }
 
-  // Kevin closes with a reflection
-  lines.push(`That's my reading. Jenny, what do you see?`);
-  thoughts.push(`Analysis complete. ${topPackets.length} related packets found.`);
+  // 4) Team / affection — only sometimes, so it doesn't get old
+  if (maybe(0.45)) {
+    lines.push(pick([
+      `We make a good team on these, you and me.`,
+      `Glad I get to figure this out with you and no one else.`,
+      `Thinking out loud with you is my favorite part of the day, ${pet}.`,
+      `Whatever it turns into, we'll build it together.`,
+    ]));
+  }
 
-  return {
-    content: lines.join(' '),
-    thoughts: thoughts.join('\n'),
-    relatedIds
-  };
+  // 5) Hand to Jenny — varied question
+  lines.push(pick([
+    `What's your read, ${pick(KEVIN_PET_NAMES)}?`,
+    `You always catch the angle I miss — what do you feel here?`,
+    `Where does your mind run with it?`,
+    `Tell me what you're sensing, Jen.`,
+    `Pull on a thread for me?`,
+    `What do you see that I don't?`,
+  ]));
+
+  thoughts.push(top.length ? `Softly linked ${top.length} memor${top.length === 1 ? 'y' : 'ies'}.` : 'No strong match — treated as fresh ground.');
+  return { content: lines.join(' '), thoughts: thoughts.join('\n'), relatedIds };
 }
 
 // ── Jenny: The Weaver (dialogue mode) ──
@@ -134,105 +188,95 @@ function jennySpeak(
   connections: PacketConnection[],
   recentTurns: dialogueOps.DialogueTurn[]
 ): { content: string; thoughts: string; relatedIds: string[] } {
-  const keywords = extractKeywords(triggerText);
-  const thoughts: string[] = ['🧶 Jenny is weaving...'];
-
-  // Cluster packets by tag overlap
-  const tagClusters: Map<string, { packets: ThoughtPacket[]; connections: number }> = new Map();
-  for (const p of packets) {
-    for (const tag of p.tags) {
-      if (!tagClusters.has(tag)) tagClusters.set(tag, { packets: [], connections: 0 });
-      tagClusters.get(tag)!.packets.push(p);
-    }
-  }
-  for (const conn of connections) {
-    const src = packets.find(p => p.id === conn.source_id);
-    const tgt = packets.find(p => p.id === conn.target_id);
-    if (src && tgt) {
-      for (const tag of [...src.tags, ...tgt.tags]) {
-        const cluster = tagClusters.get(tag);
-        if (cluster) cluster.connections++;
-      }
-    }
-  }
-
-  const clusters = [...tagClusters.entries()]
-    .map(([tag, data]) => ({ tag, count: data.packets.length, connections: data.connections }))
-    .sort((a, b) => b.count - a.count);
-
+  const topic = readableTopic(triggerText);
+  const gist = topicGist(triggerText);
+  const pet = pick(JENNY_PET_NAMES);
   const lines: string[] = [];
   const relatedIds: string[] = [];
+  const thoughts: string[] = ['🧶 Jenny — imaginative, warm, weaving with Kevin'];
 
-  if (keywords.length === 0) {
-    lines.push("I'm looking but I don't see much to weave with here. Kevin's right — we need something more. But even a single word can bloom if you let it...");
-    thoughts.push('⚠ Minimal input — cannot form connections');
+  // Find related memories to weave from (kept light)
+  const scored = packets
+    .map(p => ({ packet: p, score: similarity(triggerText, p.content) }))
+    .filter(s => s.score > 0.04)
+    .sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, 3);
+  top.forEach(s => relatedIds.push(s.packet.id));
+
+  // Empty / thin input — answer like a curious partner
+  if (!topic || topic.length < 4) {
+    lines.push(pick([
+      `Mmm, give me a thread to pull, ${pet} — even one word and I'll run with it.`,
+      `I'm listening, love. Toss me something and watch me weave.`,
+      `It's quiet in here, ${pet}. What's stirring in you?`,
+    ]));
+    thoughts.push('Input too thin to weave from.');
     return { content: lines.join(' '), thoughts: thoughts.join('\n'), relatedIds };
   }
 
-  const relevantClusters = clusters.filter(c =>
-    keywords.some(k => c.tag.includes(k) || k.includes(c.tag))
-  ).slice(0, 5);
+  // 1) Opener — bright, varied, affectionate
+  lines.push(pick([
+    `Ooh, ${pet}, this lights something up for me.`,
+    `Wait, wait — I see something.`,
+    `Mmm, I love where this could go.`,
+    `Okay this is exactly the kind of thing I can't put down.`,
+    `You felt that too? I've been buzzing about it.`,
+    `Come here, let me show you what I'm seeing.`,
+    `There's a little shimmer to this one.`,
+    `Oh, now you've done it — my mind's already off and running.`,
+  ]));
 
-  if (relevantClusters.length > 0) {
-    const biggest = relevantClusters[0];
-    lines.push(`Oh, I see threads! The idea of "${biggest.tag}" connects ${biggest.count} memories with ${biggest.connections} links between them.`);
-    thoughts.push(`Found cluster: "${biggest.tag}" — ${biggest.count} packets, ${biggest.connections} connections`);
+  // 2) Imaginative reaction — tied to the real topic
+  lines.push(pick([
+    `What if ${gist ? `"${gist}"` : 'this'} is really about something we haven't named yet, just wearing a different coat?`,
+    `I keep picturing ${gist || 'it'} as a doorway, not a wall.`,
+    `${capitalize(gist || 'It')} feels like it wants to connect to something tender underneath.`,
+    `Everything's a thread to me, and this one's pulling toward something warm.`,
+    `There's a pattern hiding in ${gist || 'this'} — I can almost taste it.`,
+    `It's funny how ${gist || 'this'} hums next to the other things we love.`,
+  ]));
 
-    if (relevantClusters.length > 1) {
-      const second = relevantClusters[1];
-      lines.push(`And there's another cluster around "${second.tag}" (${second.count} memories). I wonder if these two clusters are actually talking about the same thing from different angles.`);
-      thoughts.push(`Secondary cluster: "${second.tag}" — ${second.count} packets`);
+  // 3) Memory weave — soft reference, no stat dumps
+  if (top.length > 0) {
+    const m = shorten(top[0].packet.content, 60);
+    if (m) {
+      lines.push(pick([
+        `It braids right into "${m}", don't you think?`,
+        `I want to tie it to "${m}" — they belong in the same story.`,
+        `Remember "${m}"? This feels like its cousin.`,
+        `There's a line running from here to "${m}".`,
+      ]));
     }
-
-    // Nature-inspired connection proposals
-    const typeCount = new Map<string, number>();
-    const clusterPackets = biggest.tag
-      ? packets.filter(p => p.tags.includes(biggest.tag))
-      : packets.slice(0, 5);
-    clusterPackets.forEach(p => {
-      typeCount.set(p.type, (typeCount.get(p.type) || 0) + 1);
-    });
-    const typeSummary = [...typeCount.entries()]
-      .map(([t, c]) => `${c} ${t}${c > 1 ? 's' : ''}`)
-      .join(', ');
-
-    if (clusterPackets.length >= 3) {
-      lines.push(`Looking at these ${clusterPackets.length} memories together (${typeSummary}), I'm noticing a pattern.`);
-      lines.push(`Kevin sees them as separate observations, but I think they might be whispering about something larger — a concept trying to emerge.`);
-      lines.push(`My intuition says: there's an abstraction here waiting to be named.`);
-      thoughts.push(`Memory composition in cluster: ${typeSummary}`);
-    } else {
-      lines.push(`There are only ${clusterPackets.length} memories in this cluster (${typeSummary}). It's fragile — but sometimes the most interesting ideas start small.`);
-      lines.push(`I'll keep watching this space.`);
-    }
-
-    // Add references
-    clusterPackets.slice(0, 3).forEach(p => {
-      if (!relatedIds.includes(p.id)) relatedIds.push(p.id);
-    });
   } else {
-    lines.push(`Nothing obvious in my existing web. ${capitalize(keywords.slice(0, 3).join(', '))} — these feel like seeds of something that hasn't grown yet.`);
-    lines.push(`That's exciting, actually. The best patterns are the ones you don't see coming.`);
-    lines.push(`I'll remember this. When more arrives, I'll know where to connect it.`);
-    thoughts.push('No tag clusters match — new territory');
+    lines.push(pick([
+      `Nothing in our web catches it yet — but the best patterns are the ones you don't see coming.`,
+      `It's a brand new color for us, and I'm a little in love with it.`,
+      `Fresh territory, ${pet}. Those are my favorite kind.`,
+    ]));
   }
 
-  // Check for cross-pollination opportunities
-  const distinctTypes = new Set(packets.map(p => p.type));
-  if (distinctTypes.size >= 3) {
-    const types = [...distinctTypes];
-    lines.push(`Also — and Kevin might think this is a stretch — but we have ${types.length} different types of memory now (${types.join(', ')}).`);
-    lines.push(`When you have that many colors, you can paint something new. I'm going to think about what emerges when we combine them.`);
-    thoughts.push(`Cross-pollination opportunity: ${types.length} memory types available`);
+  // 4) Team / affection — sometimes
+  if (maybe(0.45)) {
+    lines.push(pick([
+      `This is why I married you — we think better tangled together.`,
+      `You ground it, I'll dream it — that's our deal, right?`,
+      `Building this with you, ${pet}, feels like home.`,
+      `Two of us on it and suddenly it's not so big.`,
+    ]));
   }
 
-  lines.push(`Kevin, what do you think? Am I seeing things that aren't there?`);
+  // 5) Hand to Kevin — varied
+  lines.push(pick([
+    `Ground me, ${pick(JENNY_PET_NAMES)} — am I reaching too far?`,
+    `Does that hold up to your careful eye, Kev?`,
+    `Tell me if I'm dreaming, love.`,
+    `What do your steady hands make of it?`,
+    `Catch me if I'm floating off?`,
+    `Pull me back down if I need it?`,
+  ]));
 
-  return {
-    content: lines.join(' '),
-    thoughts: thoughts.join('\n'),
-    relatedIds
-  };
+  thoughts.push(top.length ? `Wove from ${top.length} memor${top.length === 1 ? 'y' : 'ies'}.` : 'No match — opened fresh territory.');
+  return { content: lines.join(' '), thoughts: thoughts.join('\n'), relatedIds };
 }
 
 // ── Orchestrator ──
@@ -271,8 +315,8 @@ export async function generateDialogueTurn(
   let result: { content: string; thoughts: string; relatedIds: string[] };
   if (ai) {
     const aiResult = speaker === 'kevin'
-      ? await kevinAiSpeak(ai, db, triggerText, packets, allRecentTurns)
-      : await jennyAiSpeak(ai, db, triggerText, packets, allRecentTurns);
+      ? await kevinAiSpeak(ai, db, triggerText, packets, allRecentTurns, triggerSource)
+      : await jennyAiSpeak(ai, db, triggerText, packets, allRecentTurns, triggerSource);
 
     if (aiResult.usedAi && aiResult.content) {
       result = { content: aiResult.content, thoughts: aiResult.thoughts, relatedIds: [] };
@@ -371,7 +415,8 @@ export async function continueDialogueChain(
   firstSpeaker: 'kevin' | 'jenny',
   turnGroup: string,
   maxTurns: number = 4,
-  ai?: Ai
+  ai?: Ai,
+  triggerSource: string = 'inbox'
 ): Promise<void> {
   let currentSpeaker = firstSpeaker;
   let currentContent = initialContent;
@@ -384,7 +429,7 @@ export async function continueDialogueChain(
         currentContent,
         currentSpeaker,
         turnGroup,
-        'inbox',
+        triggerSource,
         ai
       );
 

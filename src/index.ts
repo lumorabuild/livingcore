@@ -35,10 +35,10 @@ app.get('/health', (c) => {
 });
 
 // Manual cron trigger (HTTP) — for debugging
-// Note: cron runs the free symbolic engine. The AI budget (8 calls/agent/day)
-// is reserved for user-driven inbox conversations so testing always gets the brain.
+// Cron may use the AI brain too, but capped (CRON_AI_CAP) so it can't drain the
+// daily budget — user-driven inbox conversations always keep brain budget in reserve.
 app.get('/__cron', async (c) => {
-  const result = await runCronCycle(c.env.DB);
+  const result = await runCronCycle(c.env.DB, c.env.AI);
   return c.json(result);
 });
 
@@ -88,8 +88,8 @@ app.all('*', (c) => {
 // Cloudflare calls this for cron triggers (now every 1 min for testing)
 
 export async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledController) {
-  // Cron uses the free symbolic engine; AI budget is reserved for inbox testing.
-  ctx.waitUntil(runCronCycle(env.DB));
+  // Cron may use the AI brain (capped), with budget reserved for inbox testing.
+  ctx.waitUntil(runCronCycle(env.DB, env.AI));
 }
 
 // ── Shared cron logic ──
@@ -122,7 +122,8 @@ async function runCronCycle(db: D1Database, ai?: Ai) {
           nextSpeaker,
           rssResult.turn_group,
           3,  // 3 additional turns → total: 6 turns in one continuous conversation
-          ai
+          ai,
+          'cron'
         );
         chainResult = true;
       }
@@ -165,7 +166,7 @@ async function generateStandaloneConversation(db: D1Database, ai?: Ai): Promise<
 
   // Continue for 3 more turns → total: 4 turns
   await dialogueEngine.continueDialogueChain(
-    db, firstResult.turn.content, 'jenny', turnGroup, 3, ai
+    db, firstResult.turn.content, 'jenny', turnGroup, 3, ai, 'cron'
   ).catch(() => {});
 
   return true;

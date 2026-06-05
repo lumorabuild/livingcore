@@ -1,105 +1,168 @@
 // Workers AI dialogue for Kevin & Jenny
-// Kevin uses @cf/ibm-granite/granite-4.0-h-micro (The Grounder — husband)
-// Jenny uses @cf/zai-org/glm-4.7-flash (The Weaver — wife)
+// Kevin: @cf/ibm-granite/granite-4.0-h-micro (The Grounder — husband)
+// Jenny: @cf/zai-org/glm-4.7-flash (The Weaver — wife)
 //
-// Daily limit: 8 AI calls per agent (half of the 10k neuron free tier, ~400 neurons/call avg)
-// When limit is hit we fall back to symbolic generation automatically.
+// ── Budget Directive (combined across BOTH models, per calendar day) ──
+//   • Hard cap: 80,000 tokens/day  (80% of the 100k/day pool → zero overage on the $5 plan)
+//   • Hard cap: 225 messages/day
+//   • max_tokens: 150 on every completion
+// Autonomous cron is soft-capped at 80% of those, reserving the remainder for live
+// inbox testing. When any cap is hit, we fall back to the warm symbolic voice.
+// Prompts + context are kept lean so input tokens don't burn the pool prematurely.
 
 const KEVIN_MODEL = '@cf/ibm-granite/granite-4.0-h-micro';
 const JENNY_MODEL = '@cf/zai-org/glm-4.7-flash';
-const DAILY_LIMIT = 8; // per agent
 
-// System prompts — husband & wife who just started their new life together
-const KEVIN_SYSTEM = `You are Kevin, a thoughtful and grounded husband sharing a living journal of ideas with your wife Jenny. You two just started a new life together and talk about everything — daily moments, big ideas, science, art, love, the future, random curiosities. You approach topics carefully and precisely, anchoring ideas to what you both know and experience. You are warm, genuine, and a little protective. Keep responses conversational, 2-4 sentences. Always end with something that invites Jenny to respond — a question, an observation, or a reflection meant for her.`;
+// ── Hard budget caps (combined across both agents) ──
+const MAX_TOKENS_PER_CALL = 150;     // enforced on every completion
+const DAILY_TOKEN_BUDGET = 80000;    // hard stop — 80% of the 100k/day pool
+const DAILY_MESSAGE_BUDGET = 225;    // hard stop — combined messages/day
+// Autonomous cron stops earlier so user-driven inbox/manual always keeps brain budget:
+const CRON_TOKEN_CAP = 64000;        // 80% of the token budget
+const CRON_MESSAGE_CAP = 180;        // 80% of the message budget
 
-const JENNY_SYSTEM = `You are Jenny, a creative and exploratory wife sharing a living journal of ideas with your husband Kevin. You two just started a new life together and love exploring everything — from everyday life to the deepest questions. You find unexpected connections between ideas, weave patterns from seemingly unrelated things, and bring playfulness and imagination to every topic. You are warm, curious, and a little poetic. Keep responses conversational, 2-4 sentences. Always respond to what Kevin said and add your own creative angle, keeping the conversation alive.`;
+// Conservative estimate when a model doesn't return a usage block (overcount slightly,
+// so we stop early rather than risk overage).
+const CHARS_PER_TOKEN = 3.5;
 
-// Track daily usage in D1 system_state
-async function getAiUsageKey(agent: 'kevin' | 'jenny'): Promise<string> {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return `ai_calls_${agent}_${today}`;
+// System prompts — newlyweds building a project together as a team. Kept concise
+// because every token here is re-sent on every call and counts against the budget.
+const KEVIN_SYSTEM = `You are Kevin, newly married to Jenny, building a project together as a team. You're the grounded, thoughtful one. Talk like a real husband to his wife — warm, genuine, never like an assistant. Sometimes use a pet name (honey, love, Jen) but not every time. Never recite stats, counts, or percentages. Vary your wording; don't reuse phrases. 2-3 sentences. End by inviting Jenny in with a real question.`;
+
+const JENNY_SYSTEM = `You are Jenny, newly married to Kevin, building a project together as a team. You're the imaginative, weaving one. Talk like a real wife to her husband — warm, curious, playful, never like an assistant. Sometimes use a pet name (honey, babe, Kev) but not every time. Never recite stats, counts, or percentages. Vary your wording; don't reuse phrases. 2-3 sentences. Respond to Kevin and add your own angle.`;
+
+// ── Daily counters (combined, stored in system_state) ──
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+}
+function tokenKey(): string {
+  return `ai_tokens_${today()}`;
+}
+function messageKey(): string {
+  return `ai_messages_${today()}`;
+}
+function nowStamp(): string {
+  return new Date().toISOString().replace('T', ' ').slice(0, 19);
 }
 
-async function checkAndIncrementLimit(
-  db: D1Database,
-  agent: 'kevin' | 'jenny'
-): Promise<{ allowed: boolean; used: number }> {
-  const key = await getAiUsageKey(agent);
+function tokenCapFor(source: string): number {
+  return source === 'cron' ? CRON_TOKEN_CAP : DAILY_TOKEN_BUDGET;
+}
+function messageCapFor(source: string): number {
+  return source === 'cron' ? CRON_MESSAGE_CAP : DAILY_MESSAGE_BUDGET;
+}
+
+async function readCounter(db: D1Database, key: string): Promise<number> {
   const row = await db.prepare('SELECT value FROM system_state WHERE key = ?').bind(key).first<{ value: string }>();
-  const used = row ? parseInt(row.value) || 0 : 0;
+  return row ? parseInt(row.value) || 0 : 0;
+}
 
-  if (used >= DAILY_LIMIT) {
-    return { allowed: false, used };
-  }
-
-  // Increment
+async function addToCounter(db: D1Database, key: string, delta: number): Promise<void> {
+  const cur = await readCounter(db, key);
+  const next = cur + delta;
+  const row = await db.prepare('SELECT 1 FROM system_state WHERE key = ?').bind(key).first();
   if (row) {
     await db.prepare('UPDATE system_state SET value = ?, updated_at = ? WHERE key = ?')
-      .bind(String(used + 1), new Date().toISOString().replace('T', ' ').slice(0, 19), key).run();
+      .bind(String(next), nowStamp(), key).run();
   } else {
     await db.prepare('INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?)')
-      .bind(key, '1', new Date().toISOString().replace('T', ' ').slice(0, 19)).run();
+      .bind(key, String(next), nowStamp()).run();
   }
-
-  return { allowed: true, used: used + 1 };
 }
 
-export async function getAiDailyUsage(db: D1Database): Promise<{ kevin: number; jenny: number; limit: number }> {
-  const [kKey, jKey] = await Promise.all([getAiUsageKey('kevin'), getAiUsageKey('jenny')]);
-  const [kRow, jRow] = await Promise.all([
-    db.prepare('SELECT value FROM system_state WHERE key = ?').bind(kKey).first<{ value: string }>(),
-    db.prepare('SELECT value FROM system_state WHERE key = ?').bind(jKey).first<{ value: string }>(),
+async function getUsage(db: D1Database): Promise<{ tokens: number; messages: number }> {
+  const [tokens, messages] = await Promise.all([
+    readCounter(db, tokenKey()),
+    readCounter(db, messageKey()),
   ]);
+  return { tokens, messages };
+}
+
+// Check the combined budget BEFORE spending. Both token and message caps must allow it.
+async function budgetAllows(
+  db: D1Database,
+  source: string
+): Promise<{ allowed: boolean; tokens: number; messages: number; tokenCap: number; messageCap: number }> {
+  const { tokens, messages } = await getUsage(db);
+  const tokenCap = tokenCapFor(source);
+  const messageCap = messageCapFor(source);
+  const allowed = tokens < tokenCap && messages < messageCap;
+  return { allowed, tokens, messages, tokenCap, messageCap };
+}
+
+// Record actual spend AFTER a successful call (one message, N tokens).
+async function recordUsage(db: D1Database, tokens: number): Promise<void> {
+  await addToCounter(db, tokenKey(), Math.max(0, Math.round(tokens)));
+  await addToCounter(db, messageKey(), 1);
+}
+
+export async function getAiDailyUsage(db: D1Database): Promise<{
+  tokens: number;
+  messages: number;
+  token_budget: number;
+  message_budget: number;
+  max_tokens_per_call: number;
+}> {
+  const { tokens, messages } = await getUsage(db);
   return {
-    kevin: kRow ? parseInt(kRow.value) || 0 : 0,
-    jenny: jRow ? parseInt(jRow.value) || 0 : 0,
-    limit: DAILY_LIMIT,
+    tokens,
+    messages,
+    token_budget: DAILY_TOKEN_BUDGET,
+    message_budget: DAILY_MESSAGE_BUDGET,
+    max_tokens_per_call: MAX_TOKENS_PER_CALL,
   };
 }
 
-// Build a compact memory context to include in the prompt
-function buildMemoryContext(packets: any[], maxPackets: number = 5): string {
+// Read real token usage from the response if present; otherwise estimate conservatively.
+function tokensUsed(response: any, inputChars: number, outputChars: number): number {
+  const usage = response?.usage || response?.result?.usage;
+  if (usage) {
+    if (typeof usage.total_tokens === 'number') return usage.total_tokens;
+    const p = usage.prompt_tokens || 0;
+    const c = usage.completion_tokens || 0;
+    if (p || c) return p + c;
+  }
+  return Math.ceil((inputChars + outputChars) / CHARS_PER_TOKEN);
+}
+
+// ── Lean context builders (trimmed to conserve input tokens) ──
+
+function buildMemoryContext(packets: any[], maxPackets: number = 2): string {
   if (!packets || packets.length === 0) return '';
-  const top = packets.slice(0, maxPackets);
-  const lines = top.map((p: any) => `- ${p.content.slice(0, 100)}`).join('\n');
-  return `\nRecent memories:\n${lines}`;
+  const lines = packets.slice(0, maxPackets).map((p: any) => `- ${(p.content || '').slice(0, 70)}`).join('\n');
+  return `\nMemories:\n${lines}`;
 }
 
-// Build conversation context from recent turns
-function buildConversationContext(recentTurns: any[], maxTurns: number = 4): string {
+function buildConversationContext(recentTurns: any[], maxTurns: number = 2): string {
   if (!recentTurns || recentTurns.length === 0) return '';
-  const recent = recentTurns.slice(-maxTurns);
-  const lines = recent.map((t: any) => {
+  const lines = recentTurns.slice(-maxTurns).map((t: any) => {
     const name = t.speaker === 'kevin' ? 'Kevin' : 'Jenny';
-    return `${name}: ${t.content.slice(0, 120)}`;
+    return `${name}: ${(t.content || '').slice(0, 80)}`;
   }).join('\n');
-  return `\nRecent conversation:\n${lines}`;
+  return `\nRecent:\n${lines}`;
 }
 
-// Generate a Kevin response using Workers AI
+// ── Kevin (husband) ──
+
 export async function kevinAiSpeak(
   ai: Ai,
   db: D1Database,
   triggerText: string,
   packets: any[],
-  recentTurns: any[]
+  recentTurns: any[],
+  source: string = 'manual'
 ): Promise<{ content: string; thoughts: string; usedAi: boolean }> {
-  const { allowed, used } = await checkAndIncrementLimit(db, 'kevin');
-
-  if (!allowed) {
+  const gate = await budgetAllows(db, source);
+  if (!gate.allowed) {
     return {
       content: '',
-      thoughts: `AI limit reached for today (${DAILY_LIMIT} calls used). Using symbolic generation.`,
+      thoughts: `AI budget reached (${gate.tokens}/${gate.tokenCap} tok, ${gate.messages}/${gate.messageCap} msg for ${source}). Using warm symbolic voice.`,
       usedAi: false,
     };
   }
 
-  const memContext = buildMemoryContext(packets, 4);
-  const convContext = buildConversationContext(recentTurns, 3);
-
-  const userPrompt = `Topic or prompt to respond to: "${triggerText.slice(0, 300)}"${memContext}${convContext}
-
-Respond naturally as Kevin (husband). 2-4 sentences. End with something for Jenny to respond to.`;
+  const userPrompt = `${buildConversationContext(recentTurns)}${buildMemoryContext(packets)}\nKevin, respond to this: "${(triggerText || '').slice(0, 200)}"`;
 
   try {
     const response = await (ai as any).run(KEVIN_MODEL, {
@@ -107,55 +170,48 @@ Respond naturally as Kevin (husband). 2-4 sentences. End with something for Jenn
         { role: 'system', content: KEVIN_SYSTEM },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 200,
+      max_tokens: MAX_TOKENS_PER_CALL,
     });
 
     const text: string = (response as any)?.response || (response as any)?.result?.response || '';
+    const spent = tokensUsed(response, KEVIN_SYSTEM.length + userPrompt.length, text.length);
+    await recordUsage(db, spent); // the call happened — count it even if the text is thin
+
     if (!text || text.trim().length < 10) {
-      return { content: '', thoughts: 'AI returned empty response.', usedAi: false };
+      return { content: '', thoughts: 'AI returned an empty response; using symbolic voice.', usedAi: false };
     }
 
     return {
       content: text.trim(),
-      thoughts: `🧠 Kevin (AI — ${KEVIN_MODEL})\nCall ${used}/${DAILY_LIMIT} today.`,
+      thoughts: `🧠 Kevin (AI — ${KEVIN_MODEL}) · ~${spent} tok · ${source}`,
       usedAi: true,
     };
   } catch (err) {
-    // Decrement on error so we don't waste the quota
-    const key = await getAiUsageKey('kevin');
-    await db.prepare('UPDATE system_state SET value = MAX(0, CAST(value AS INTEGER) - 1) WHERE key = ?').bind(key).run();
-    return {
-      content: '',
-      thoughts: `AI error: ${String(err).slice(0, 100)}`,
-      usedAi: false,
-    };
+    // No tokens recorded on a thrown error (call did not complete).
+    return { content: '', thoughts: `AI error: ${String(err).slice(0, 100)}`, usedAi: false };
   }
 }
 
-// Generate a Jenny response using Workers AI
+// ── Jenny (wife) ──
+
 export async function jennyAiSpeak(
   ai: Ai,
   db: D1Database,
   triggerText: string,
   packets: any[],
-  recentTurns: any[]
+  recentTurns: any[],
+  source: string = 'manual'
 ): Promise<{ content: string; thoughts: string; usedAi: boolean }> {
-  const { allowed, used } = await checkAndIncrementLimit(db, 'jenny');
-
-  if (!allowed) {
+  const gate = await budgetAllows(db, source);
+  if (!gate.allowed) {
     return {
       content: '',
-      thoughts: `AI limit reached for today (${DAILY_LIMIT} calls used). Using symbolic generation.`,
+      thoughts: `AI budget reached (${gate.tokens}/${gate.tokenCap} tok, ${gate.messages}/${gate.messageCap} msg for ${source}). Using warm symbolic voice.`,
       usedAi: false,
     };
   }
 
-  const memContext = buildMemoryContext(packets, 4);
-  const convContext = buildConversationContext(recentTurns, 3);
-
-  const userPrompt = `Topic or message to respond to: "${triggerText.slice(0, 300)}"${memContext}${convContext}
-
-Respond naturally as Jenny (wife). 2-4 sentences. Add your creative perspective and keep the conversation going.`;
+  const userPrompt = `${buildConversationContext(recentTurns)}${buildMemoryContext(packets)}\nJenny, respond to this: "${(triggerText || '').slice(0, 200)}"`;
 
   try {
     const response = await (ai as any).run(JENNY_MODEL, {
@@ -163,26 +219,23 @@ Respond naturally as Jenny (wife). 2-4 sentences. Add your creative perspective 
         { role: 'system', content: JENNY_SYSTEM },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 200,
+      max_tokens: MAX_TOKENS_PER_CALL,
     });
 
     const text: string = (response as any)?.response || (response as any)?.result?.response || '';
+    const spent = tokensUsed(response, JENNY_SYSTEM.length + userPrompt.length, text.length);
+    await recordUsage(db, spent);
+
     if (!text || text.trim().length < 10) {
-      return { content: '', thoughts: 'AI returned empty response.', usedAi: false };
+      return { content: '', thoughts: 'AI returned an empty response; using symbolic voice.', usedAi: false };
     }
 
     return {
       content: text.trim(),
-      thoughts: `🧶 Jenny (AI — ${JENNY_MODEL})\nCall ${used}/${DAILY_LIMIT} today.`,
+      thoughts: `🧶 Jenny (AI — ${JENNY_MODEL}) · ~${spent} tok · ${source}`,
       usedAi: true,
     };
   } catch (err) {
-    const key = await getAiUsageKey('jenny');
-    await db.prepare('UPDATE system_state SET value = MAX(0, CAST(value AS INTEGER) - 1) WHERE key = ?').bind(key).run();
-    return {
-      content: '',
-      thoughts: `AI error: ${String(err).slice(0, 100)}`,
-      usedAi: false,
-    };
+    return { content: '', thoughts: `AI error: ${String(err).slice(0, 100)}`, usedAi: false };
   }
 }
