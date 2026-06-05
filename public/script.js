@@ -69,13 +69,13 @@
         input && (input.value = '');
         if (feedback) {
           var msg = userName
-            ? '✨ ' + userName + ' — Kevin & Jenny are discussing your idea...'
-            : '✨ Kevin & Jenny are discussing your idea...';
+            ? '💌 Thanks ' + userName + ' — your note is on its way to Kevin & Jenny.'
+            : '💌 Your note is on its way to Kevin & Jenny.';
           feedback.textContent = msg;
           feedback.classList.remove('hidden');
           setTimeout(function () {
             feedback.classList.add('hidden');
-          }, 4000);
+          }, 5000);
         }
       } else {
         showError(feedback, 'Failed to send. Try again?');
@@ -85,7 +85,7 @@
     }
 
     submitBtn && (submitBtn.disabled = false);
-    submitBtn && (submitBtn.textContent = 'Drop Idea');
+    submitBtn && (submitBtn.textContent = 'Send note');
   };
 
   function showError(el, msg) {

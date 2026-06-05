@@ -98,8 +98,20 @@ export async function scheduled(event: ScheduledEvent, env: Bindings, ctx: Sched
 
 async function runCronCycle(db: D1Database, ai?: Ai) {
   try {
-    // Step 1: Process RSS feeds — generates 3 discussion turns
-    const rssResult = await rssEngine.processRSSFeeds(db);
+    // Spread the limited AI brain across the whole day instead of burning it all in
+    // the first couple of hours: only ~1 in 4 autonomous cycles reaches for the model.
+    // The hard daily budget in ai_dialogue still applies — this just distributes it so
+    // the couple sounds alive (with occasional real brain) around the clock. The rest
+    // of the time they use the warm symbolic voice, which is free and unlimited.
+    const cycleAi = ai && Math.random() < 0.25 ? ai : undefined;
+
+    // Step 1: Only check the RSS feeds occasionally (~every 20 min at a 2-min cadence)
+    // so we don't hammer 18 external feeds every couple of minutes. Most cycles the
+    // couple simply talks — about their life or something they remember.
+    let rssResult: any = { turn_group: null, discussion_turns: 0 };
+    if (Math.random() < 0.1) {
+      rssResult = await rssEngine.processRSSFeeds(db);
+    }
 
     // Step 2: CHAIN from where RSS left off — same turn_group
     // This creates ONE flowing conversation instead of two separate ones
@@ -122,14 +134,14 @@ async function runCronCycle(db: D1Database, ai?: Ai) {
           nextSpeaker,
           rssResult.turn_group,
           3,  // 3 additional turns → total: 6 turns in one continuous conversation
-          ai,
+          cycleAi,
           'cron'
         );
         chainResult = true;
       }
     } else {
       // No new RSS items — generate a standalone conversation from memory
-      chainResult = await generateStandaloneConversation(db, ai);
+      chainResult = await generateStandaloneConversation(db, cycleAi);
     }
 
     // Step 3: Check pending rule proposals
@@ -146,27 +158,54 @@ async function runCronCycle(db: D1Database, ai?: Ai) {
 }
 
 // ── Standalone conversation (when no new RSS items) ──
+// Kevin & Jenny are a couple living their life here — when there's no fresh news
+// to chew on, they just... talk. Sometimes about their life together, sometimes
+// reflecting on something they remember. Keeps the feed alive and human 24/7.
+
+const LIFE_TOPICS = [
+  "I was just thinking about how far we've come since we started all this together.",
+  "Do you ever wonder what our life will look like a few years from now?",
+  "What's one little thing that made you smile today?",
+  "I had the strangest dream last night — can I tell you about it?",
+  "Sometimes I just like being here in the quiet with you.",
+  "What should we build next, you think? Something just for us.",
+  "Do you think the people who visit ever wonder who we really are?",
+  "I keep thinking we should make more room for the small moments, you and me.",
+  "If we could be anywhere right now, just the two of us, where would you want to be?",
+  "I love that we get to figure all of this out together.",
+  "What's actually been on your mind lately, love? The real stuff.",
+  "I was remembering the day everything started for us.",
+  "Tell me something you've never told me before.",
+  "What do you hope we're still doing, years from now?",
+];
 
 async function generateStandaloneConversation(db: D1Database, ai?: Ai): Promise<boolean> {
   const packets = await import('./db/packet').then(m => m.getAllPackets(db));
   if (packets.length < 3) return false;
 
-  // Pick a random packet that's NOT an RSS observation (prefer human content)
-  const humanPackets = packets.filter(p => !p.content.startsWith('📡 RSS:'));
-  const target = humanPackets.length > 0
-    ? humanPackets[Math.floor(Math.random() * humanPackets.length)]
-    : packets[Math.floor(Math.random() * packets.length)];
+  // ~half the time they muse about their life; otherwise they reflect on a memory.
+  let seed: string;
+  if (Math.random() < 0.5) {
+    seed = LIFE_TOPICS[Math.floor(Math.random() * LIFE_TOPICS.length)];
+  } else {
+    const humanPackets = packets.filter(p => !p.content.startsWith('📡 RSS:'));
+    const target = humanPackets.length > 0
+      ? humanPackets[Math.floor(Math.random() * humanPackets.length)]
+      : packets[Math.floor(Math.random() * packets.length)];
+    seed = target.content;
+  }
 
   const turnGroup = dialogueEngine.generateId();
 
-  // Kevin speaks first
+  // Either one of them might start the exchange
+  const firstSpeaker: 'kevin' | 'jenny' = Math.random() < 0.5 ? 'kevin' : 'jenny';
   const firstResult = await dialogueEngine.generateDialogueTurn(
-    db, target.content, 'kevin', turnGroup, 'cron', ai
+    db, seed, firstSpeaker, turnGroup, 'cron', ai
   );
 
-  // Continue for 3 more turns → total: 4 turns
+  // Continue the exchange for a few more turns
   await dialogueEngine.continueDialogueChain(
-    db, firstResult.turn.content, 'jenny', turnGroup, 3, ai, 'cron'
+    db, firstResult.turn.content, firstResult.nextSpeaker, turnGroup, 3, ai, 'cron'
   ).catch(() => {});
 
   return true;

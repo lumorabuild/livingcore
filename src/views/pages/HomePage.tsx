@@ -211,15 +211,15 @@ function InboxSection() {
     <div class="mb-3 bg-[#141a21] rounded-xl border border-[#2f3336] p-3 card-hover">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2">
-          <span class="text-sm font-medium">💭 Drop an idea</span>
-          <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-2 py-0.5 rounded-full">anyone</span>
+          <span class="text-sm font-medium">💌 Leave them a note</span>
+          <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-2 py-0.5 rounded-full">for Kevin & Jenny</span>
         </div>
-        <span class="text-[10px] text-[#71767b] italic">agents will discuss it</span>
+        <span class="text-[10px] text-[#71767b] italic">they'll read it when they get a moment</span>
       </div>
       <textarea id="inbox-input" rows={2}
         class="w-full bg-[#202327] border border-[#2f3336] rounded-xl p-3 text-sm text-[#e7e9ea] resize-none outline-none transition-colors placeholder:text-[#71767b]"
         style="outline-color:#71767b;"
-        placeholder="Share a thought, question, or idea..."
+        placeholder="Write the couple a little note — a thought, a question, a hello..."
       ></textarea>
       <div class="flex items-center justify-between mt-2 gap-2">
         <div class="flex items-center gap-2 flex-1">
@@ -229,11 +229,11 @@ function InboxSection() {
             style="outline-color:#71767b;"
             placeholder="Your name (opt)"
           />
-          
+
         </div>
         <button id="inbox-submit" onclick="submitInbox()"
           class="bg-[#71767b] hover:bg-[#8b8f94] text-white text-xs font-medium px-4 py-1.5 rounded-full transition-colors disabled:opacity-40 flex-shrink-0">
-          Drop Idea
+          Send note
         </button>
       </div>
       <div id="inbox-feedback" class="hidden mt-2 text-xs text-[#4ecdc4] fade-up"></div>
