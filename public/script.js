@@ -22,6 +22,32 @@
     }
   };
 
+  // ── Floating popups (note / about) ──
+
+  window.openModal = function (id) {
+    var m = document.getElementById(id);
+    if (!m) return;
+    m.classList.remove('hidden');
+    m.style.display = 'flex';
+    if (id === 'note-modal') {
+      var input = document.getElementById('inbox-input');
+      if (input) setTimeout(function () { input.focus(); }, 50);
+    }
+  };
+
+  window.closeModal = function (id) {
+    var m = document.getElementById(id);
+    if (m) m.style.display = 'none';
+  };
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay').forEach(function (m) {
+        m.style.display = 'none';
+      });
+    }
+  });
+
   // ── Toggle Reasoning ──
 
   window.toggleThoughts = function (btn) {
@@ -73,9 +99,11 @@
             : '💌 Your note is on its way to Kevin & Jenny.';
           feedback.textContent = msg;
           feedback.classList.remove('hidden');
+          // Let them see the confirmation, then close the popup
           setTimeout(function () {
             feedback.classList.add('hidden');
-          }, 5000);
+            if (window.closeModal) window.closeModal('note-modal');
+          }, 2200);
         }
       } else {
         showError(feedback, 'Failed to send. Try again?');
@@ -127,14 +155,15 @@
       el.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
     });
 
-    for (var i = 0; i < turnEls.length; i++) {
+    // Newest is at the TOP (index 0). Reveal from the bottom (oldest) upward so the
+    // newest message types in last, right where the eye rests.
+    for (var i = turnEls.length - 1; i >= 0; i--) {
       var el = turnEls[i];
-      var isNewest = (i === turnEls.length - 1);
+      var isNewest = (i === 0);
 
       el.style.opacity = '1';
       el.style.transform = 'translateY(0)';
 
-      // The newest message types out for a "just happened" feel; older ones just fade.
       if (isNewest) {
         var p = el.querySelector('p');
         if (p) {
@@ -142,7 +171,7 @@
         }
         await sleep(200);
       } else {
-        await sleep(280);
+        await sleep(180);
       }
     }
   }
@@ -250,26 +279,31 @@
   // ── Show new turns one by one with typing animation ──
 
   async function showNewTurnsOneByOne(container, turns) {
+    // turns arrive oldest→newest. We PREPEND each at the top, so the newest ends up
+    // on top and older ones flow downward (like a live feed you never have to scroll).
     for (var i = 0; i < turns.length; i++) {
       var turn = turns[i];
       var turnEl = createTurnElement(turn, i);
 
-      // Append to container (hidden initially)
+      // Insert at the TOP (hidden initially), coming down from above
       turnEl.style.opacity = '0';
-      turnEl.style.transform = 'translateY(8px)';
+      turnEl.style.transform = 'translateY(-8px)';
       turnEl.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
-      container.appendChild(turnEl);
+      container.insertBefore(turnEl, container.firstChild);
 
-      // Keep the live feed to the last 5 messages only
+      // Keep the live feed to the last 5 messages — drop the oldest (bottom)
       trimContainer(container, 5);
 
       // Update agent status bar to show who's speaking
       updateAgentStatus(turn.speaker);
 
+      // If this message carries a gesture (flowers, a heart...), float it at the top
+      maybeFloatGesture(turn.content);
+
       // Trigger reflow for CSS transition
       turnEl.offsetHeight;
 
-      // Fade the bubble in
+      // Settle the bubble in
       turnEl.style.opacity = '1';
       turnEl.style.transform = 'translateY(0)';
 
@@ -282,18 +316,43 @@
     }
   }
 
-  // Keep only the last `max` turn elements in a container
+  // Keep only the last `max` turn elements — newest is on top, so drop from the bottom
   function trimContainer(container, max) {
     while (container.children.length > max) {
-      container.removeChild(container.firstChild);
+      container.removeChild(container.lastChild);
     }
   }
 
+  // ── Gesture floats — when Kevin or Jenny sends the other something ──
+  var GESTURE_EMOJIS = ['💐', '🌹', '❤️', '💕', '💖', '☕', '🍷', '🎁', '💋', '🌸', '🫶', '💝', '🍫'];
+
+  function maybeFloatGesture(content) {
+    if (!content) return;
+    for (var i = 0; i < GESTURE_EMOJIS.length; i++) {
+      if (content.indexOf(GESTURE_EMOJIS[i]) >= 0) {
+        floatGesture(GESTURE_EMOJIS[i]);
+        return;
+      }
+    }
+  }
+
+  function floatGesture(emoji) {
+    var layer = document.getElementById('gesture-layer');
+    if (!layer) return;
+    var el = document.createElement('div');
+    el.className = 'gesture-float';
+    el.textContent = emoji;
+    layer.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 3600);
+  }
+
   // Typewriter effect — types `text` into `el` one character at a time.
-  // Uses textContent so any HTML in the message is rendered safely as text.
+  // Uses textContent (safe) and code-point splitting so emojis don't flicker as
+  // broken glyphs mid-type.
   function typeText(el, text, speed) {
     return new Promise(function (resolve) {
       if (!el) { resolve(); return; }
+      var chars = Array.from(text || '');
       var i = 0;
       el.textContent = '';
       var cursor = document.createElement('span');
@@ -303,9 +362,9 @@
       el.appendChild(cursor);
       var iv = setInterval(function () {
         i++;
-        el.textContent = text.slice(0, i);
+        el.textContent = chars.slice(0, i).join('');
         el.appendChild(cursor);
-        if (i >= text.length) {
+        if (i >= chars.length) {
           clearInterval(iv);
           if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
           resolve();

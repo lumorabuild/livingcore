@@ -106,5 +106,15 @@ a { color: inherit; text-decoration: none; }
 .agent-indicator.active { border-color: currentColor; }
 /* Typing cursor for active agent */
 .agent-cursor { display: inline-block; width: 2px; height: 14px; animation: blink 0.8s step-end infinite; vertical-align: middle; }
+/* Floating gesture emojis (flowers, hearts...) Kevin & Jenny send each other */
+@keyframes gestureFloat {
+  0% { opacity: 0; transform: translateY(24px) scale(0.5); }
+  18% { opacity: 1; transform: translateY(10px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-70px) scale(1.5); }
+}
+.gesture-float { position: absolute; top: 64px; font-size: 42px; line-height: 1; animation: gestureFloat 3.6s ease-out forwards; filter: drop-shadow(0 6px 12px rgba(0,0,0,0.45)); }
+/* Modal popup entrance */
+@keyframes modalIn { 0% { opacity: 0; transform: translateY(18px); } 100% { opacity: 1; transform: translateY(0); } }
+.modal-card { animation: modalIn 0.22s ease-out both; }
 `;
 }

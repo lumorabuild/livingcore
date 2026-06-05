@@ -90,6 +90,35 @@ function pickCleanMemory(scored: { packet: ThoughtPacket; score: number }[]): st
   return shorten(chosen.packet.content, 55);
 }
 
+// ── Emoji expression — Kevin & Jenny are a couple; they gesture with emojis ──
+// Full palette they can draw from, grouped by feeling.
+export const EMOJI_MOODS: Record<string, string[]> = {
+  love:       ['❤️', '🥰', '💕', '💖', '😘', '😍', '💗', '💓'],
+  flowers:    ['💐', '🌹', '🌷', '🌸', '🌻', '🌼'],
+  happy:      ['😊', '😄', '🙂', '😁', '☺️', '😌'],
+  playful:    ['😉', '😏', '😜', '🤭', '😎', '😋'],
+  thoughtful: ['🤔', '💭', '🧐', '🤨'],
+  cozy:       ['🤗', '☕', '🍷', '🕯️', '🫖', '🛋️'],
+  excited:    ['✨', '🌟', '💫', '🎉', '🙌', '🤩'],
+  tender:     ['🥺', '🫶', '💞', '🤍'],
+  sweet:      ['🍫', '🧁', '🍓', '🎁', '💝'],
+  annoyed:    ['😤', '🙄', '😒', '😠'],
+};
+
+// Emojis that read as "sending something" to the other — these get floated at the
+// top of the page as a little gesture (e.g. Kevin sending Jenny flowers).
+export const GESTURE_EMOJIS = ['💐', '🌹', '❤️', '💕', '💖', '☕', '🍷', '🎁', '💋', '🌸', '🫶', '💝', '🍫'];
+
+const KEVIN_MOODS = ['thoughtful', 'love', 'cozy', 'flowers', 'happy', 'sweet'];
+const JENNY_MOODS = ['love', 'playful', 'excited', 'tender', 'flowers', 'happy'];
+
+// Sprinkle an emoji onto ~55% of turns so it stays expressive, not spammy.
+function decorateWithEmoji(content: string, agent: 'kevin' | 'jenny'): string {
+  if (Math.random() > 0.55) return content;
+  const mood = pick(agent === 'kevin' ? KEVIN_MOODS : JENNY_MOODS);
+  return `${content} ${pick(EMOJI_MOODS[mood])}`;
+}
+
 // ── Kevin: The Grounder (dialogue mode) ──
 
 function kevinSpeak(
@@ -184,7 +213,7 @@ function kevinSpeak(
   ]));
 
   thoughts.push(top.length ? `Softly linked ${top.length} memor${top.length === 1 ? 'y' : 'ies'}.` : 'No strong match — treated as fresh ground.');
-  return { content: lines.join(' '), thoughts: thoughts.join('\n'), relatedIds };
+  return { content: decorateWithEmoji(lines.join(' '), 'kevin'), thoughts: thoughts.join('\n'), relatedIds };
 }
 
 // ── Jenny: The Weaver (dialogue mode) ──
@@ -280,7 +309,7 @@ function jennySpeak(
   ]));
 
   thoughts.push(top.length ? `Wove from ${top.length} memor${top.length === 1 ? 'y' : 'ies'}.` : 'No match — opened fresh territory.');
-  return { content: lines.join(' '), thoughts: thoughts.join('\n'), relatedIds };
+  return { content: decorateWithEmoji(lines.join(' '), 'jenny'), thoughts: thoughts.join('\n'), relatedIds };
 }
 
 // ── Orchestrator ──

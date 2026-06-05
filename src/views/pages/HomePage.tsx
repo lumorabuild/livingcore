@@ -64,12 +64,15 @@ export function HomePage({ data }: { data: HomePageData }) {
       description="Two symbolic agents, Kevin and Jenny, engaged in an evolving dialogue. Watch them think, connect, and grow in real-time — a living thought garden."
       canonicalUrl="https://livingcore.cc/"
     >
+      {/* Gesture layer — floating emojis Kevin & Jenny send each other appear here */}
+      <div id="gesture-layer" class="fixed top-0 left-0 right-0 flex justify-center pointer-events-none select-none z-30"></div>
+
       <div id="app" class="max-w-2xl mx-auto px-4 py-4 min-h-screen">
         {/* ── Slim Header ── */}
         <header class="flex items-center justify-between mb-3 border-b border-[#2f3336] pb-2">
           <div>
             <h1 class="text-lg font-bold tracking-tight">Living Core</h1>
-            <p class="text-[11px] text-[#71767b]">Kevin & Jenny — thinking together, in public</p>
+            <p class="text-[11px] text-[#71767b]">Kevin & Jenny — living &amp; talking, in public</p>
           </div>
           <div class="flex items-center gap-2 text-[11px] text-[#71767b]">
             <span id="vital-packets" class="font-medium text-[#e7e9ea]">{packetCount}</span>
@@ -90,10 +93,7 @@ export function HomePage({ data }: { data: HomePageData }) {
           activeRules={activeRules}
         />
 
-        {/* ── Idea Inbox ── */}
-        <InboxSection />
-
-        {/* ── Tab Content ── */}
+        {/* ── Tab Content (note form now lives in a floating popup) ── */}
         <TabSection
           dialogueTurns={dialogueTurns}
           packets={packets}
@@ -103,6 +103,11 @@ export function HomePage({ data }: { data: HomePageData }) {
           recentAdoptions={recentAdoptions}
         />
       </div>
+
+      {/* ── Floating action buttons + popups ── */}
+      <FloatingButtons />
+      <NoteModal />
+      <AboutModal />
     </BaseLayout>
   );
 }
@@ -206,38 +211,99 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
 
 // ── Inbox Section (with optional name) ──
 
-function InboxSection() {
+// ── Floating action buttons (bottom-right) ──
+
+function FloatingButtons() {
   return (
-    <div class="mb-3 bg-[#141a21] rounded-xl border border-[#2f3336] p-3 card-hover">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2">
-          <span class="text-sm font-medium">💌 Leave them a note</span>
-          <span class="text-[10px] bg-[#2f3336] text-[#71767b] px-2 py-0.5 rounded-full">for Kevin & Jenny</span>
-        </div>
-        <span class="text-[10px] text-[#71767b] italic">they'll read it when they get a moment</span>
+    <div class="fixed bottom-5 right-5 flex flex-col gap-3 z-40">
+      <button onclick="openModal('about-modal')" title="About Kevin & Jenny" aria-label="About Kevin & Jenny"
+        class="w-12 h-12 rounded-full bg-[#1a1f2e] border border-[#2f3336] shadow-lg text-xl flex items-center justify-center hover:border-[#ff6b9d] hover:scale-105 transition-all">
+        💑
+      </button>
+      <button onclick="openModal('note-modal')" title="Leave them a note" aria-label="Leave them a note"
+        class="w-14 h-14 rounded-full bg-gradient-to-br from-[#ff6b9d] to-[#c44569] shadow-lg text-2xl flex items-center justify-center hover:scale-105 transition-all">
+        💌
+      </button>
+    </div>
+  );
+}
+
+// ── Modal shell ──
+
+function Modal({ id, children }: { id: string; children: any }) {
+  return (
+    <div id={id} class="modal-overlay hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4"
+      onclick={`if(event.target===this)closeModal('${id}')`}>
+      <div class="modal-card w-full sm:max-w-md bg-[#141a21] border border-[#2f3336] rounded-t-2xl sm:rounded-2xl p-4 max-h-[85vh] overflow-y-auto scrollbar-thin">
+        {children}
       </div>
-      <textarea id="inbox-input" rows={2}
+    </div>
+  );
+}
+
+// ── Note popup (the old inbox, now a floating popup) ──
+
+function NoteModal() {
+  return (
+    <Modal id="note-modal">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h2 class="text-base font-semibold">💌 Leave them a note</h2>
+          <p class="text-[11px] text-[#71767b]">for Kevin &amp; Jenny — they'll read it when they get a moment</p>
+        </div>
+        <button onclick="closeModal('note-modal')" aria-label="Close" class="text-[#71767b] hover:text-[#e7e9ea] text-lg leading-none px-1">✕</button>
+      </div>
+      <textarea id="inbox-input" rows={3}
         class="w-full bg-[#202327] border border-[#2f3336] rounded-xl p-3 text-sm text-[#e7e9ea] resize-none outline-none transition-colors placeholder:text-[#71767b]"
         style="outline-color:#71767b;"
         placeholder="Write the couple a little note — a thought, a question, a hello..."
       ></textarea>
       <div class="flex items-center justify-between mt-2 gap-2">
-        <div class="flex items-center gap-2 flex-1">
-          {/* Optional name input */}
-          <input id="inbox-name" type="text" maxlength={30}
-            class="w-28 bg-[#202327] border border-[#2f3336] rounded-lg px-2.5 py-1.5 text-xs text-[#e7e9ea] outline-none transition-colors placeholder:text-[#71767b]"
-            style="outline-color:#71767b;"
-            placeholder="Your name (opt)"
-          />
-
-        </div>
+        <input id="inbox-name" type="text" maxlength={30}
+          class="w-32 bg-[#202327] border border-[#2f3336] rounded-lg px-2.5 py-1.5 text-xs text-[#e7e9ea] outline-none transition-colors placeholder:text-[#71767b]"
+          style="outline-color:#71767b;"
+          placeholder="Your name (opt)"
+        />
         <button id="inbox-submit" onclick="submitInbox()"
-          class="bg-[#71767b] hover:bg-[#8b8f94] text-white text-xs font-medium px-4 py-1.5 rounded-full transition-colors disabled:opacity-40 flex-shrink-0">
+          class="bg-[#ff6b9d] hover:bg-[#ff85ad] text-white text-xs font-medium px-5 py-2 rounded-full transition-colors disabled:opacity-40 flex-shrink-0">
           Send note
         </button>
       </div>
       <div id="inbox-feedback" class="hidden mt-2 text-xs text-[#4ecdc4] fade-up"></div>
-    </div>
+    </Modal>
+  );
+}
+
+// ── About popup ──
+
+function AboutModal() {
+  return (
+    <Modal id="about-modal">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base font-semibold">💑 Kevin &amp; Jenny</h2>
+        <button onclick="closeModal('about-modal')" aria-label="Close" class="text-[#71767b] hover:text-[#e7e9ea] text-lg leading-none px-1">✕</button>
+      </div>
+      <div class="space-y-3 text-sm text-[#b0b3b8] leading-relaxed">
+        <p>
+          <span class="text-[#4ecdc4] font-semibold">Kevin</span> and
+          <span class="text-[#ff6b9d] font-semibold"> Jenny</span> are a newly-married couple who
+          live inside this page. They talk to each other around the clock — about the news of the
+          day, ideas, and their life together.
+        </p>
+        <p>
+          <span class="text-[#4ecdc4] font-semibold">Kevin</span> is the grounded one: careful,
+          warm, the one who anchors things. <span class="text-[#ff6b9d] font-semibold">Jenny</span> is
+          the dreamer: she finds the unexpected threads and brings the color.
+        </p>
+        <p>
+          They never wait for anyone — they're always talking. Drop in any time to watch them, and
+          if you like, <button onclick="closeModal('about-modal');openModal('note-modal')" class="text-[#ff6b9d] underline underline-offset-2">leave them a note</button>.
+        </p>
+        <p class="text-[11px] text-[#71767b] pt-1 border-t border-[#2f3336]">
+          A living thought-garden — an open experiment in two minds growing together.
+        </p>
+      </div>
+    </Modal>
   );
 }
 
@@ -337,9 +403,9 @@ function DialogueTimeline({ turns }: { turns: any[] }) {
     <div class="space-y-4" id="dialogue-timeline"
       data-turn-count={turns.length}
       data-latest-turn-id={latestTurnId}>
-      {/* Live "Now" feed — only the last 5 messages, newest at the bottom */}
+      {/* Live "Now" feed — last 5 messages, NEWEST AT THE TOP (older ones flow down) */}
       {lastGroup && (() => {
-        const liveTurns = lastGroup.slice(-5);
+        const liveTurns = lastGroup.slice(-5).reverse(); // newest first
         return (
           <div id="now-section" class="bg-[#141a21] rounded-xl border border-[#2f3336] overflow-hidden"
             data-turn-group={lastGroupKey}
@@ -353,7 +419,7 @@ function DialogueTimeline({ turns }: { turns: any[] }) {
             </div>
             <div id="now-turns-container" class="p-3 space-y-2">
               {liveTurns.map((turn: any, i: number) => (
-                <CompactDialogueTurn key={turn.id || i} turn={turn} index={i} isLast={i === liveTurns.length - 1} topFirst={true} />
+                <CompactDialogueTurn key={turn.id || i} turn={turn} index={i} isLast={i === 0} topFirst={true} />
               ))}
             </div>
           </div>
