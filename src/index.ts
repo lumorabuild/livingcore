@@ -113,11 +113,12 @@ const KEEP_TALKING_CHANCE = 0.85; // each cycle, odds they stay on the same topi
 
 async function runCronCycle(db: D1Database, ai?: Ai) {
   try {
-    // Spread the limited AI brain across the whole day instead of burning it all in
-    // the first couple of hours: only ~1 in 4 autonomous cycles reaches for the model.
-    // The hard daily budget in ai_dialogue still applies. The rest of the time they
-    // use the warm symbolic voice, which is free and unlimited.
-    const cycleAi = ai && Math.random() < 0.25 ? ai : undefined;
+    // Use the real AI brain on ~85% of cycles so visitors actually see genuine Kevin &
+    // Jenny dialogue, not the symbolic fallback. The hard cron budget cap (180 messages/day,
+    // 3 per cycle) means only ~60 AI cycles succeed before it exhausts — roughly the first
+    // 2 hours of each day. After that the daily cap auto-throttles to the symbolic voice
+    // for the rest of the day; it resets at midnight UTC.
+    const cycleAi = ai && Math.random() < 0.85 ? ai : undefined;
 
     // Occasionally check the RSS feeds (~every 20 min). Fresh news starts a new topic
     // thread; we don't hammer 18 external feeds every couple of minutes.

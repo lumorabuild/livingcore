@@ -56,7 +56,10 @@ export async function fetchHomePageData(db: D1Database): Promise<HomePageData> {
 export function HomePage({ data }: { data: HomePageData }) {
   const { state, dialogueTurns, packets, rssItems, pendingInbox, activeRules, pendingProposals, recentAdoptions, coherenceValue } = data;
   const packetCount = packets.length || 0;
-  const turnCount = dialogueTurns.length;
+  // Real cumulative turn count from system_state. dialogueTurns is capped at the fetch limit
+  // (50), so dialogueTurns.length would freeze the header at "50 turns" forever once the
+  // archive grows past 50 — which is exactly what was happening.
+  const turnCount = parseInt((state as any).system_state?.turn_sequence || '0') || dialogueTurns.length;
 
   return (
     <BaseLayout
