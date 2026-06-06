@@ -136,6 +136,42 @@ function tokensUsed(response: any, inputChars: number, outputChars: number): num
   return Math.ceil((inputChars + outputChars) / CHARS_PER_TOKEN);
 }
 
+// Pull the assistant text out of a Workers AI response. Models return different shapes —
+// most use { response }, but OpenAI-compatible partner models (granite, glm) nest it under
+// choices[].message.content, and some wrap everything in { result }. Try them all and return
+// the first non-empty string. (Kevin & Jenny were going silent because we only read .response,
+// which these models leave empty — so every turn fell back to the symbolic voice.)
+function extractAiText(response: any): string {
+  if (!response) return '';
+  if (typeof response === 'string') return response;
+  const candidates = [
+    response.response,
+    response.result?.response,
+    response.choices?.[0]?.message?.content,
+    response.choices?.[0]?.text,
+    response.result?.choices?.[0]?.message?.content,
+    response.message?.content,
+    response.output_text,
+    response.text,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length > 0) return c;
+  }
+  return '';
+}
+
+// Compact description of a response's shape (top-level keys, plus result/choices internals) so
+// that if extraction still fails the reason is visible in the saved `thoughts` — lets us pinpoint
+// the right field from the DB without needing Worker logs.
+function describeShape(response: any): string {
+  if (response == null) return String(response);
+  if (typeof response !== 'object') return typeof response;
+  let s = `{${Object.keys(response).join(',')}}`;
+  if (response.result && typeof response.result === 'object') s += ` result:{${Object.keys(response.result).join(',')}}`;
+  if (Array.isArray(response.choices) && response.choices[0] && typeof response.choices[0] === 'object') s += ` choices0:{${Object.keys(response.choices[0]).join(',')}}`;
+  return s;
+}
+
 // ── Lean context builders (trimmed to conserve input tokens) ──
 
 function buildMemoryContext(packets: any[], maxPackets: number = 2): string {
@@ -194,12 +230,12 @@ export async function kevinAiSpeak(
       extraHeaders: { 'x-session-affinity': 'kevin-livingcore' },
     });
 
-    const text: string = (response as any)?.response || (response as any)?.result?.response || '';
+    const text: string = extractAiText(response);
     const spent = tokensUsed(response, KEVIN_SYSTEM.length + userPrompt.length, text.length);
     await recordUsage(db, spent); // the call happened — count it even if the text is thin
 
     if (!text || text.trim().length < 10) {
-      return { content: '', thoughts: 'AI returned an empty response; using symbolic voice.', usedAi: false };
+      return { content: '', thoughts: `AI returned no usable text (shape: ${describeShape(response)}); using symbolic voice.`, usedAi: false };
     }
 
     return {
@@ -251,12 +287,12 @@ export async function jennyAiSpeak(
       extraHeaders: { 'x-session-affinity': 'jenny-livingcore' },
     });
 
-    const text: string = (response as any)?.response || (response as any)?.result?.response || '';
+    const text: string = extractAiText(response);
     const spent = tokensUsed(response, JENNY_SYSTEM.length + userPrompt.length, text.length);
     await recordUsage(db, spent);
 
     if (!text || text.trim().length < 10) {
-      return { content: '', thoughts: 'AI returned an empty response; using symbolic voice.', usedAi: false };
+      return { content: '', thoughts: `AI returned no usable text (shape: ${describeShape(response)}); using symbolic voice.`, usedAi: false };
     }
 
     return {
