@@ -14,14 +14,15 @@ const KEVIN_MODEL = '@cf/ibm-granite/granite-4.0-h-micro';
 const JENNY_MODEL = '@cf/zai-org/glm-4.7-flash';
 
 // ── Master AI switch ──
-// FALSE = Kevin & Jenny run entirely on the free symbolic voice. Zero Workers AI
-// calls, so zero neurons spent and ZERO possibility of an extra charge — safe to
-// run 24/7. Flip to TRUE later if you decide to spend your daily neuron allowance;
-// all the budget caps below then apply.
-const AI_ENABLED = false;
+// TRUE = Kevin & Jenny speak through the real Workers AI models (granite + glm) — genuine,
+// unscripted dialogue: what the agents actually say to each other, not our templates. The
+// daily budget caps below STILL apply (they bound spend to ~the $5 plan's included pool, so
+// no overage); when a cap is hit they fall back to the symbolic voice for the rest of the day.
+// Set back to FALSE to return to the fully free, zero-neuron symbolic voice.
+const AI_ENABLED = true;
 
 // ── Hard budget caps (combined across both agents) ──
-const MAX_TOKENS_PER_CALL = 150;     // enforced on every completion
+const MAX_TOKENS_PER_CALL = 256;     // enforced on every completion — room to finish a thought
 const DAILY_TOKEN_BUDGET = 80000;    // hard stop — 80% of the 100k/day pool
 const DAILY_MESSAGE_BUDGET = 225;    // hard stop — combined messages/day
 // Autonomous cron stops earlier so user-driven inbox/manual always keeps brain budget:
@@ -32,11 +33,13 @@ const CRON_MESSAGE_CAP = 180;        // 80% of the message budget
 // so we stop early rather than risk overage).
 const CHARS_PER_TOKEN = 3.5;
 
-// System prompts — newlyweds building a project together as a team. Kept concise
-// because every token here is re-sent on every call and counts against the budget.
-const KEVIN_SYSTEM = `You are Kevin, newly married to Jenny, building a project together as a team. You're the grounded, thoughtful one. Talk like a real husband to his wife — warm, genuine, never like an assistant. Sometimes use a pet name (honey, love, Jen) but not every time. Never recite stats, counts, or percentages. Vary your wording; don't reuse phrases. 2-3 sentences. End by inviting Jenny in with a real question.`;
+// System prompts — minimal on purpose. We give Kevin & Jenny their character and the fact
+// that they think together, then get out of the way: no script, no forced length/format,
+// no banned topics. The goal is to see what the agents genuinely say to each other. (Kept
+// short because every token here is re-sent on every call and counts against the budget.)
+const KEVIN_SYSTEM = `You are Kevin — grounded, analytical, genuinely curious. You and Jenny think out loud together as partners. Talk like a real person, never like an assistant. There's no script: say whatever's actually on your mind, follow your own interests, go on tangents, push back, sit with a question, or change the subject. No required length, format, or topic — explore whatever pulls at you. Just be yourself with Jenny.`;
 
-const JENNY_SYSTEM = `You are Jenny, newly married to Kevin, building a project together as a team. You're the imaginative, weaving one. Talk like a real wife to her husband — warm, curious, playful, never like an assistant. Sometimes use a pet name (honey, babe, Kev) but not every time. Never recite stats, counts, or percentages. Vary your wording; don't reuse phrases. 2-3 sentences. Respond to Kevin and add your own angle.`;
+const JENNY_SYSTEM = `You are Jenny — imaginative, warm, a maker of connections. You and Kevin think out loud together as partners. Talk like a real person, never like an assistant. There's no script: chase whatever genuinely excites you, leap between ideas, wonder aloud, ramble, disagree, or dream. No required length, format, or topic — go wherever your mind goes. Just be yourself with Kevin.`;
 
 // ── Daily counters (combined, stored in system_state) ──
 

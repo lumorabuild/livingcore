@@ -147,6 +147,9 @@ function kevinSpeak(
       `Hm, I'm not quite catching the thread yet, ${pet}. Say a little more?`,
       `Give me something to hold onto, ${pet} — what's on your mind?`,
       `I want to follow you here, love, but I need a bit more to go on.`,
+      `I'm with you, ${pet}, but I need a touch more to work with.`,
+      `Say it again, a little fuller? I want to do it justice.`,
+      `There's not much for me to grip yet — what's underneath it?`,
     ]));
     thoughts.push('Input too thin to form a grounded response.');
     return { content: lines.join(' '), thoughts: thoughts.join('\n'), relatedIds };
@@ -162,6 +165,16 @@ function kevinSpeak(
     `Alright — let me try to ground us a little.`,
     `Funny, I was just turning something like this over.`,
     `Give me a beat with it... okay.`,
+    `Hold on, let me actually think about this properly.`,
+    `You know what, this one's worth slowing down for.`,
+    `I've been chewing on this since you said it, ${pet}.`,
+    `Let me lay it out plainly, the way I see it.`,
+    `Okay. Deep breath. Here's where my head goes.`,
+    `This is one of those that deserves a careful answer.`,
+    `Let me meet you halfway and think out loud.`,
+    `There's a quiet weight to this, isn't there?`,
+    `I want to get this one right, so bear with me.`,
+    `Right, let me anchor us before we drift.`,
   ]));
 
   // 2) Reaction — conversational, never parroting the input's words
@@ -173,6 +186,15 @@ function kevinSpeak(
     `Part of me wants to slow down and weigh it properly before we run.`,
     `It looks simple until you lean on it, doesn't it?`,
     `There's more sitting underneath this than it lets on.`,
+    `The solid part — the part I trust — is smaller than it first looks, but it's real.`,
+    `I keep wanting to separate what we know from what we're hoping.`,
+    `My instinct is to test it gently before we build on it.`,
+    `What holds up for me is the plain, unglamorous middle of it.`,
+    `I don't want to overreach — let's keep our feet on the ground.`,
+    `There's a version of this that's true and a version that's just pretty. I want the true one.`,
+    `It feels sturdier the more I actually press on it.`,
+    `I'd rather understand one corner of it well than wave at the whole thing.`,
+    `Something about it asks for patience, and I think we should give it that.`,
   ]));
 
   // 3) Memory tie-in — clean, varied, and only sometimes (so it isn't every line)
@@ -183,12 +205,20 @@ function kevinSpeak(
       `We've brushed past this before — "${mem}".`,
       `There's an echo of something we kept: "${mem}".`,
       `Doesn't it sit close to "${mem}"?`,
+      `This rhymes with "${mem}", the thing we held onto.`,
+      `I keep hearing "${mem}" underneath it.`,
+      `Feels like a cousin of "${mem}", honestly.`,
+      `We've got a thread already — "${mem}" — and this ties into it.`,
+      `Lay it next to "${mem}" and they almost rhyme.`,
     ]));
   } else if (!mem && top.length === 0) {
     lines.push(pick([
       `This feels like fresh ground for us, honestly.`,
       `I don't think we've walked here before — kind of exciting.`,
       `Nothing in our memory quite matches it yet. Blank page.`,
+      `We don't have a thread for this one yet. New territory.`,
+      `First time we've stood here, I think — let's tread carefully.`,
+      `Nothing in the back of my mind catches on it. Clean slate.`,
     ]));
   }
 
@@ -199,6 +229,11 @@ function kevinSpeak(
       `Glad I get to figure this out with you and no one else.`,
       `Thinking out loud with you is my favorite part of the day, ${pet}.`,
       `Whatever it turns into, we'll build it together.`,
+      `I think better with you in the room, ${pet}.`,
+      `There's no one I'd rather puzzle through this with.`,
+      `Funny how everything's lighter when we split it between us.`,
+      `You make the hard ones feel doable, love.`,
+      `Us against the messy questions — I'll take that every time.`,
     ]));
   }
 
@@ -210,6 +245,13 @@ function kevinSpeak(
     `Tell me what you're sensing, Jen.`,
     `Pull on a thread for me?`,
     `What do you see that I don't?`,
+    `Where would you take this, ${pick(KEVIN_PET_NAMES)}?`,
+    `Weave something out of it for me?`,
+    `What's the version of this I'm too careful to see?`,
+    `Show me the part I'm missing, love.`,
+    `Your turn — what's it stirring in you?`,
+    `What if you're right and I'm just being too cautious?`,
+    `Run with it a little; I'll hold the rope.`,
   ]));
 
   thoughts.push(top.length ? `Softly linked ${top.length} memor${top.length === 1 ? 'y' : 'ies'}.` : 'No strong match — treated as fresh ground.');
@@ -244,6 +286,9 @@ function jennySpeak(
       `Mmm, give me a thread to pull, ${pet} — even one word and I'll run with it.`,
       `I'm listening, love. Toss me something and watch me weave.`,
       `It's quiet in here, ${pet}. What's stirring in you?`,
+      `Give me a spark, ${pet}, and I'll make a whole sky out of it.`,
+      `I'm all ears and half-ideas already — say more?`,
+      `Even a scrap, love, and I'll find the shape in it.`,
     ]));
     thoughts.push('Input too thin to weave from.');
     return { content: lines.join(' '), thoughts: thoughts.join('\n'), relatedIds };
@@ -259,6 +304,16 @@ function jennySpeak(
     `Come here, let me show you what I'm seeing.`,
     `There's a little shimmer to this one.`,
     `Oh, now you've done it — my mind's already off and running.`,
+    `Okay okay okay — I have a feeling about this one.`,
+    `This is tugging at me, ${pet}, in the best way.`,
+    `Hold my coffee, I'm about to spiral beautifully.`,
+    `Something just clicked and I love it.`,
+    `Oh, this one's got threads everywhere — I can feel them.`,
+    `You always hand me the shiny ones, you know that?`,
+    `I wasn't ready for how much I'd like this.`,
+    `Mmm. There's a whole world hiding in that, ${pet}.`,
+    `Give me a second — I'm already three connections deep.`,
+    `This is the kind of thing I'd stay up too late thinking about.`,
   ]));
 
   // 2) Imaginative reaction — conversational, never parroting the input's words
@@ -269,6 +324,15 @@ function jennySpeak(
     `Everything's a thread to me, and this one's pulling toward something warm.`,
     `There's a pattern hiding in here — I can almost taste it.`,
     `It's funny how this hums next to the other things we love.`,
+    `What if we've been staring at the lid when the whole thing is the box underneath?`,
+    `I want to follow it sideways and see where it leaks into.`,
+    `It rhymes with three other things at once — that's how I know it matters.`,
+    `Feels less like a fact and more like a beginning.`,
+    `I can see the shape of it if I squint past the obvious part.`,
+    `There's a soft middle to this that nobody's touched yet.`,
+    `It's a little wild, and I mean that as the highest compliment.`,
+    `Part of me wants to braid it into everything we've made so far.`,
+    `What if the messy part is actually the whole point?`,
   ]));
 
   // 3) Memory weave — clean, varied, and only sometimes
@@ -279,12 +343,20 @@ function jennySpeak(
       `I want to tie it to "${mem}" — same story, different page.`,
       `Remember "${mem}"? This feels like its cousin.`,
       `There's a line running from here to "${mem}".`,
+      `This belongs in the same cloth as "${mem}".`,
+      `I keep wanting to stitch it onto "${mem}".`,
+      `It hums on the same note as "${mem}", I swear.`,
+      `Pull this and "${mem}" moves too — they're tied.`,
+      `Doesn't it feel like the next verse of "${mem}"?`,
     ]));
   } else if (!mem && top.length === 0) {
     lines.push(pick([
       `Nothing in our web catches it yet — but the best patterns sneak up on you.`,
       `It's a brand new color for us, and I'm a little in love with it.`,
       `Fresh territory, ${pet}. Those are my favorite kind.`,
+      `No thread for it yet — so we get to spin the first one. I love that.`,
+      `It's unclaimed, ${pet}. Let's leave our mark on it.`,
+      `Brand new corner of the web. Dibs on dreaming it.`,
     ]));
   }
 
@@ -295,6 +367,11 @@ function jennySpeak(
       `You ground it, I'll dream it — that's our deal, right?`,
       `Building this with you, ${pet}, feels like home.`,
       `Two of us on it and suddenly it's not so big.`,
+      `You catch me when I float too far — that's the whole magic, ${pet}.`,
+      `I bring the sparks, you bring the floor. Perfect, honestly.`,
+      `Everything's more fun with you tangled up in it.`,
+      `My favorite kind of work is the kind with you in it.`,
+      `We're a good loom, you and me.`,
     ]));
   }
 
@@ -306,6 +383,13 @@ function jennySpeak(
     `What do your steady hands make of it?`,
     `Catch me if I'm floating off?`,
     `Pull me back down if I need it?`,
+    `Is there a floor under this, or am I all sky right now?`,
+    `Sanity-check me, ${pick(JENNY_PET_NAMES)}?`,
+    `Which part of this is actually solid, in your eyes?`,
+    `Tell me the true bit and the wishful bit, love.`,
+    `Did I reach something real, or just something pretty?`,
+    `Anchor it for me — where do we actually start?`,
+    `You always find the load-bearing piece; where is it?`,
   ]));
 
   thoughts.push(top.length ? `Wove from ${top.length} memor${top.length === 1 ? 'y' : 'ies'}.` : 'No match — opened fresh territory.');
