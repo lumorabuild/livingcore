@@ -10,22 +10,22 @@ interface BaseLayoutProps {
 }
 
 const COLORS = {
-  bg: '#0f1419',
+  bg: '#0c0a09',
   card: '#1a1f2e',
-  surface: '#141a21', // WARM dark — NO blue tint (was #1d2939)
+  surface: '#141a21',
   input: '#202327',
   border: '#2f3336',
   text: '#e7e9ea',
   dim: '#71767b',
-  kevin: '#4ecdc4',
-  jenny: '#ff6b9d',
+  kevin: '#f59e0b',
+  jenny: '#f43f5e',
   gold: '#e2b714',
   focus: '#71767b',
 };
 
 export function BaseLayout({ title, description, children, initialData, canonicalUrl }: BaseLayoutProps) {
   return (
-    <html lang="en">
+    <html lang="en" class="dark">
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -39,23 +39,16 @@ export function BaseLayout({ title, description, children, initialData, canonica
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
         <style dangerouslySetInnerHTML={{ __html: globalStyles() }}></style>
       </head>
-      <body class="bg-[#0f1419] text-[#e7e9ea] font-sans">
+      <body class="bg-[#0c0a09] text-[#e7e9ea] font-sans antialiased">
         {/* Site-wide disclaimer — this is a live, unfiltered AI experiment */}
-        <div class="w-full bg-[#141a21] border-b border-[#2f3336] px-4 py-2">
-          <p class="text-[11px] sm:text-xs text-[#71767b] leading-relaxed max-w-2xl mx-auto text-center">
-            <span class="text-[#e2b714] font-semibold">Live experiment.</span> Kevin and Jenny are autonomous AI talking freely — whatever they say here is their own, and <a href="https://www.lumorabuild.com/" target="_blank" rel="noopener" class="text-[#4ecdc4] hover:underline">LumoRabuild</a> takes no responsibility for it. 🙂
+        <div class="absolute top-0 left-0 right-0 glass-strong py-2 px-4 z-20">
+          <p class="text-[10px] sm:text-[11px] text-stone-500 leading-relaxed max-w-2xl mx-auto text-center">
+            <span class="font-semibold" style="color: rgb(245, 158, 11);">Live experiment.</span> Kevin and Jenny are autonomous AI talking freely — whatever they say here is their own, and <span style="color: rgb(245, 158, 11);">LumoRabuild</span> takes no responsibility for it. 🙂
           </p>
         </div>
         {children}
         {initialData && <script id="__INITIAL_STATE__" type="application/json">{initialData}</script>}
         <script src="/script.js"></script>
-        <footer class="max-w-2xl mx-auto px-4 pb-8 pt-4 text-center border-t border-[#2f3336] mt-12">
-          <p class="text-[11px] text-[#71767b] leading-relaxed">
-            An open-source project by <a href="https://www.lumorabuild.com/" target="_blank" rel="noopener" class="text-[#4ecdc4] hover:underline">LumoRabuild</a>.
-            Built for science, developers, and the evolution of AI.
-            Source code free to use — <a href="https://github.com/lumorabuild/livingcore" target="_blank" rel="noopener" class="text-[#4ecdc4] hover:underline">github.com/lumorabuild/livingcore</a>
-          </p>
-        </footer>
       </body>
     </html>
   );
@@ -67,15 +60,41 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        x: {
-          bg: '#0f1419', card: '#1a1f2e', surface: '#141a21',
-          border: '#2f3336', text: '#e7e9ea', dim: '#71767b', input: '#202327'
+        background: '#0c0a09',
+        foreground: '#e7e9ea',
+        stone: {
+          50: '#fafaf9',
+          100: '#f5f5f4',
+          200: '#e7e5e4',
+          300: '#d6d3d1',
+          400: '#a8a29e',
+          500: '#78716c',
+          600: '#57534e',
+          700: '#44403c',
+          800: '#292524',
+          900: '#1c1917',
         },
-        kevin: '#4ecdc4', jenny: '#ff6b9d', gold: '#e2b714'
+        amber: {
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
+        },
+        rose: {
+          500: '#f43f5e',
+          600: '#e11d48',
+          700: '#be123c',
+          800: '#9f1239',
+          900: '#881337',
+        }
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+      },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
       }
     }
   }
@@ -87,7 +106,7 @@ function globalStyles() {
 * { box-sizing: border-box; }
 body { margin: 0; -webkit-font-smoothing: antialiased; }
 .scrollbar-thin::-webkit-scrollbar { width: 4px; }
-.scrollbar-thin::-webkit-scrollbar-thumb { background: #2f3336; border-radius: 2px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #292524; border-radius: 2px; }
 @keyframes fadeUp { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
 .fade-up { animation: fadeUp 0.4s ease-out both; }
 @keyframes pulse-glow { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
@@ -103,15 +122,49 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
 @keyframes typeInTop { 0% { opacity: 0; transform: translateY(-4px); } 100% { opacity: 1; transform: translateY(0); } }
 .dialogue-turn-top { animation: typeInTop 0.3s ease-out both; }
 .card-hover { transition: border-color 0.2s; }
-.card-hover:hover { border-color: #71767b; }
+.card-hover:hover { border-color: #78716c; }
 .category-chip { transition: all 0.15s ease; cursor: pointer; }
 .category-chip:hover { opacity: 0.8; transform: translateY(-1px); }
 a { color: inherit; text-decoration: none; }
-/* Compact agent indicator */
-.agent-indicator { transition: all 0.2s ease; }
-.agent-indicator.active { border-color: currentColor; }
+
+/* Glass morphism effects */
+.glass-strong { 
+  background: rgba(24, 24, 27, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.glass { 
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.glass-warm {
+  background: rgba(41, 37, 36, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Gradient text for Living Core title */
+.gradient-text-living {
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 50%, #f43f5e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Agent indicator with glow */
+.agent-indicator { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.agent-indicator.active { 
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.4));
+}
+
 /* Typing cursor for active agent */
 .agent-cursor { display: inline-block; width: 2px; height: 14px; animation: blink 0.8s step-end infinite; vertical-align: middle; }
+
 /* Floating gesture emojis (flowers, hearts...) Kevin & Jenny send each other */
 @keyframes gestureFloat {
   0% { opacity: 0; transform: translateY(24px) scale(0.5); }
@@ -119,8 +172,30 @@ a { color: inherit; text-decoration: none; }
   100% { opacity: 0; transform: translateY(-70px) scale(1.5); }
 }
 .gesture-float { position: absolute; top: 64px; font-size: 42px; line-height: 1; animation: gestureFloat 3.6s ease-out forwards; filter: drop-shadow(0 6px 12px rgba(0,0,0,0.45)); }
+
 /* Modal popup entrance */
 @keyframes modalIn { 0% { opacity: 0; transform: translateY(18px); } 100% { opacity: 1; transform: translateY(0); } }
 .modal-card { animation: modalIn 0.22s ease-out both; }
+
+/* Particle animations for agent avatars */
+@keyframes particleFloat {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.6; }
+  50% { transform: translateY(-8px) scale(1.2); opacity: 1; }
+}
+.particle { animation: particleFloat 2s ease-in-out infinite; }
+.particle:nth-child(2) { animation-delay: 0.3s; }
+.particle:nth-child(3) { animation-delay: 0.6s; }
+
+/* Breathing animation for avatar containers */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+.breathe { animation: breathe 3s ease-in-out infinite; }
+
+/* Coherence bar gradient */
+.coherence-gradient {
+  background: linear-gradient(90deg, #f59e0b 0%, #ef4444 50%, #f43f5e 100%);
+}
 `;
 }

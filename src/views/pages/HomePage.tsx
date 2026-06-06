@@ -139,35 +139,35 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
   const pattern = recentSpeakers.join(' → ') || '';
 
   return (
-    <div class="mb-3 bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-3">
+    <div class="mb-3 glass-strong rounded-xl border border-stone-800/50 p-3">
       {/* Agent Row */}
       <div class="flex items-center justify-between mb-2">
         {/* Kevin */}
         <div class="flex items-center gap-2 min-w-0">
           <div id="kevin-indicator" class={`agent-indicator relative ${kevinSpeaking ? 'active' : ''} flex-shrink-0`}
-               style={kevinSpeaking ? `border-bottom:2px solid #4ecdc4;padding-bottom:2px;` : ''}>
+               style={kevinSpeaking ? `border-bottom:2px solid rgb(245, 158, 11);padding-bottom:2px;` : ''}>
             <KevinFace mood={kevinMood} speaking={kevinSpeaking} size={36} showLabel={false} />
           </div>
           <div class="min-w-0">
             <div class="flex items-center gap-1.5">
-              <span class="text-xs font-semibold text-[#4ecdc4]">Kevin</span>
-              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">husband</span>
+              <span class="text-xs font-semibold" style={{ color: 'rgb(245, 158, 11)', textShadow: 'rgba(245, 158, 11, 0.3) 0px 0px 12px' }}>Kevin</span>
+              <span class="text-[9px] text-stone-600 bg-stone-800/50 px-1.5 py-0.5 rounded-full">The Grounder</span>
             </div>
             <div id="kevin-status" class="flex items-center gap-1 mt-0.5">
               {kevinSpeaking ? (
                 <>
-                  <span class="text-[10px] text-[#4ecdc4] font-medium">speaking</span>
-                  <ThinkingBars color="#4ecdc4" />
+                  <span class="text-[10px] font-medium" style={{ color: 'rgb(245, 158, 11)' }}>speaking</span>
+                  <ThinkingBars color="rgb(245, 158, 11)" />
                 </>
               ) : (
-                <span class="text-[10px] text-[#71767b]">listening</span>
+                <span class="text-[10px] text-stone-600">listening</span>
               )}
             </div>
           </div>
         </div>
 
         {/* Divider */}
-        <div id="agent-divider" class="text-[#2f3336] text-[10px] px-1 flex-shrink-0">
+        <div id="agent-divider" class="text-stone-700 text-[10px] px-1 flex-shrink-0">
           {kevinSpeaking ? '►' : jennySpeaking ? '◄' : '↔'}
         </div>
 
@@ -175,29 +175,29 @@ function CompactAgentBar({ dialogueTurns, coherenceValue, packets, activeRules }
         <div class="flex items-center gap-2 min-w-0 text-right">
           <div class="min-w-0 order-2">
             <div class="flex items-center gap-1.5 justify-end">
-              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">wife</span>
-              <span class="text-xs font-semibold text-[#ff6b9d]">Jenny</span>
+              <span class="text-[9px] text-stone-600 bg-stone-800/50 px-1.5 py-0.5 rounded-full">The Weaver</span>
+              <span class="text-xs font-semibold" style={{ color: 'rgb(244, 63, 94)', textShadow: 'rgba(244, 63, 94, 0.3) 0px 0px 12px' }}>Jenny</span>
             </div>
             <div id="jenny-status" class="flex items-center gap-1 mt-0.5 justify-end">
               {jennySpeaking ? (
                 <>
-                  <ThinkingBars color="#ff6b9d" />
-                  <span class="text-[10px] text-[#ff6b9d] font-medium">speaking</span>
+                  <ThinkingBars color="rgb(244, 63, 94)" />
+                  <span class="text-[10px] font-medium" style={{ color: 'rgb(244, 63, 94)' }}>speaking</span>
                 </>
               ) : (
-                <span class="text-[10px] text-[#71767b]">listening</span>
+                <span class="text-[10px] text-stone-600">listening</span>
               )}
             </div>
           </div>
           <div id="jenny-indicator" class={`agent-indicator relative ${jennySpeaking ? 'active' : ''} order-1 flex-shrink-0`}
-               style={jennySpeaking ? `border-bottom:2px solid #ff6b9d;padding-bottom:2px;` : ''}>
+               style={jennySpeaking ? `border-bottom:2px solid rgb(244, 63, 94);padding-bottom:2px;` : ''}>
             <JennyFace mood={jennyMood} speaking={jennySpeaking} size={36} showLabel={false} />
           </div>
         </div>
       </div>
 
       {/* Turn Sequence & Stats Row */}
-      <div class="flex items-center justify-between text-[10px] text-[#71767b] pt-2 border-t border-[#2f3336]">
+      <div class="flex items-center justify-between text-[10px] text-stone-600 pt-2 border-t border-stone-800/50">
         <div class="flex items-center gap-3">
           <span>{memories} mem</span>
           <span>{concepts} conc</span>
@@ -316,12 +316,19 @@ function TabSection({ dialogueTurns, packets, rssItems, activeRules, pendingProp
   return (
     <>
       {/* Tab Navigation */}
-      <div class="flex border-b border-[#2f3336] mb-3 gap-0">
-        <TabButton id="dialogue" label="💬 Dialogue" active={true} />
-        <TabButton id="memory" label="🧠 Memory" />
-        <TabButton id="rss" label="📡 Signals" />
-        <TabButton id="evolve" label="🧬 Evolve" />
-        <a href="/archive" class="flex-1 text-center py-2.5 text-xs font-medium border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea]">📜 Archive</a>
+      <div class="flex border-b border-stone-800/50 mb-3 gap-0 glass rounded-xl p-1">
+        <TabButton id="dialogue" label="Dialogue" icon={
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-circle w-3.5 h-3.5"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>
+        } active={true} />
+        <TabButton id="memory" label="Memory" icon={
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-brain w-3.5 h-3.5"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path></svg>
+        } />
+        <TabButton id="rss" label="Signals" icon={
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio w-3.5 h-3.5"><path d="M16.247 7.761a6 6 0 0 1 0 8.478"></path><path d="M19.075 4.933a10 10 0 0 1 0 14.134"></path><circle cx="12" cy="12" r="2"></circle></svg>
+        } />
+        <TabButton id="evolve" label="Evolve" icon={
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-dna w-3.5 h-3.5"><path d="m10 16 1.5 1.5"></path><path d="m14 8-1.5-1.5"></path><path d="M15 2c-1.798 1.998-2.518 3.995-2.807 5.993"></path></svg>
+        } />
       </div>
 
       {/* Dialogue Tab */}
@@ -347,14 +354,15 @@ function TabSection({ dialogueTurns, packets, rssItems, activeRules, pendingProp
   );
 }
 
-function TabButton({ id, label, active = false }: { id: string; label: string; active?: boolean }) {
-  const activeClass = 'border-b-2 border-[#71767b] text-[#e7e9ea]';
-  const inactiveClass = 'border-b-2 border-transparent text-[#71767b] hover:text-[#e7e9ea]';
+function TabButton({ id, label, icon, active = false }: { id: string; label: string; icon?: any; active?: boolean }) {
   return (
     <button id={`tab-btn-${id}`}
       onclick={`switchTab('${id}')`}
-      class={`flex-1 text-center py-2.5 text-xs font-medium transition-colors ${active ? activeClass : inactiveClass}`}>
-      {label}
+      class={`relative flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition-all duration-200 ${active ? '' : ''}`}
+      style={active ? `color: rgb(245, 158, 11); background: rgba(245, 158, 11, 0.03);` : `color: rgb(120, 113, 108); background: transparent;`}>
+      {icon}
+      <span class="hidden sm:inline">{label}</span>
+      {active && <div class="absolute bottom-0 left-2 right-2 h-0.5 rounded-full" style="background: rgb(245, 158, 11); opacity: 1;"></div>}
     </button>
   );
 }
@@ -462,32 +470,38 @@ function DialogueTimeline({ turns }: { turns: any[] }) {
 
 function CompactDialogueTurn({ turn, index, isLast, topFirst }: { turn: any; index: number; isLast: boolean; topFirst?: boolean }) {
   const isKevin = turn.speaker === 'kevin';
-  const color = isKevin ? '#4ecdc4' : '#ff6b9d';
+  const color = isKevin ? 'rgb(245, 158, 11)' : 'rgb(244, 63, 94)';
   const name = isKevin ? 'Kevin' : 'Jenny';
   const mood = detectMood(turn.content || '');
+  const initial = isKevin ? 'K' : 'J';
 
   // Reasoning hidden by default on the latest turn
   const showReasoning = index === 0 && !topFirst;
 
   return (
-    <div class={`dialogue-turn-turn ${topFirst ? 'dialogue-turn-top' : 'dialogue-turn'}`}
-         data-speaker={turn.speaker}
-         style={`border-left:2px solid ${color}; padding-left:8px;`}>
-      <div class="flex items-center gap-1.5 mb-1">
-        <span class="text-[10px] font-semibold" style={`color:${color}`}>{name}</span>
-        <span class="text-[9px] text-[#71767b]">{isKevin ? 'husband' : 'wife'}</span>
-        <span class="text-[9px] text-[#71767b] turn-time" data-ts={turn.created_at}>{new Date(turn.created_at).toLocaleTimeString()}</span>
-        {isLast && <span class="text-[9px] text-[#71767b] animate-pulse">▍</span>}
+    <div class={`group glass-warm rounded-2xl p-4 transition-all duration-300 hover:border-opacity-30`}
+         style={`border-left: 3px solid ${color};`}>
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
+               style={{ background: `${isKevin ? 'rgba(245, 158, 11, 0.082)' : 'rgba(244, 63, 94, 0.082)'}`, color: color }}>
+            {initial}
+          </div>
+          <span class="text-xs font-semibold" style={{ color: color }}>{name}</span>
+          {/* Mood/tag badge - simplified for now */}
+        </div>
+        <span class="text-[10px] font-mono text-stone-600">{new Date(turn.created_at).toLocaleTimeString()}</span>
       </div>
-      <p class="text-xs text-[#b0b3b8] leading-relaxed">{turn.content}</p>
+      <p class="text-sm text-stone-300 leading-relaxed">{turn.content}</p>
       {(turn.thoughts || turn.thought_process) && (
-        <button onclick="toggleThoughts(this)" class="text-[9px] text-[#71767b] hover:text-[#e7e9ea] mt-1">
-          🔍 show reasoning
+        <button onclick="toggleThoughts(this)" class="mt-2 text-[10px] text-stone-600 hover:text-stone-400 transition-colors flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye w-2.5 h-2.5"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          show reasoning
         </button>
       )}
       {(turn.thoughts || turn.thought_process) && (
         <div class={`thoughts-content mt-1 ${showReasoning ? '' : 'hidden'}`}>
-          <p class="text-[10px] text-[#71767b] italic leading-relaxed whitespace-pre-wrap">{turn.thoughts || turn.thought_process}</p>
+          <p class="text-[10px] text-stone-600 italic leading-relaxed whitespace-pre-wrap">{turn.thoughts || turn.thought_process}</p>
         </div>
       )}
     </div>
@@ -497,34 +511,34 @@ function CompactDialogueTurn({ turn, index, isLast, topFirst }: { turn: any; ind
 // ── Memory Grid ──
 
 const typeColors: Record<string, string> = {
-  observation: '#4ecdc4',
-  experience: '#ff6b9d',
-  rule: '#e2b714',
-  hypothesis: '#a78bfa',
-  concept: '#4ecdc4', // WAS: '#60a5fa' — NO BLUE
+  observation: 'rgb(245, 158, 11)',
+  experience: 'rgb(244, 63, 94)',
+  rule: 'rgb(234, 179, 8)',
+  hypothesis: 'rgb(168, 85, 247)',
+  concept: 'rgb(245, 158, 11)',
 };
 
 function MemoryGrid({ packets }: { packets: any[] }) {
   if (!packets || packets.length === 0) {
-    return <div class="text-center py-8 text-sm text-[#71767b]">No memories yet.</div>;
+    return <div class="text-center py-8 text-sm text-stone-600">No memories yet.</div>;
   }
   return (
     <div class="space-y-2">
       {packets.slice(0, 50).map((p: any) => {
-        const color = typeColors[p.type] || '#71767b';
+        const color = typeColors[p.type] || 'rgb(120, 113, 108)';
         return (
           <a href={`/memory/${p.id}`} key={p.id}
-            class="block bg-[#141a21] rounded-xl border p-3 card-hover"
+            class="block glass-warm rounded-xl border p-3 card-hover"
             style={`border-color:${color}30;`}>
             <div class="flex items-center gap-2 mb-1">
-              <span class="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={`background:${color}20;color:${color};`}>
+              <span class="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: `${color}20`, color: color }}>
                 {p.type}
               </span>
               {p.primary_category && (
-                <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">{p.primary_category}</span>
+                <span class="text-[9px] text-stone-600 bg-stone-800/50 px-1.5 py-0.5 rounded-full">{p.primary_category}</span>
               )}
             </div>
-            <p class="text-xs text-[#b0b3b8] leading-relaxed line-clamp-2">{p.content}</p>
+            <p class="text-xs text-stone-300 leading-relaxed line-clamp-2">{p.content}</p>
           </a>
         );
       })}
@@ -536,26 +550,26 @@ function MemoryGrid({ packets }: { packets: any[] }) {
 
 function SignalFeed({ items }: { items: any[] }) {
   if (!items || items.length === 0) {
-    return <div class="text-center py-8 text-sm text-[#71767b]">No RSS signals yet. Waiting for cron...</div>;
+    return <div class="text-center py-8 text-sm text-stone-600">No RSS signals yet. Waiting for cron...</div>;
   }
   return (
     <div class="space-y-2">
       {items.map((item: any, i: number) => (
         <div key={item.id || i}
-          class="bg-[#141a21] rounded-xl border border-[#2f3336] p-3">
+          class="glass-warm rounded-xl border border-stone-800/50 p-3">
           <div class="flex items-center gap-2 mb-1">
-            <span class="text-[10px] font-medium text-[#e2b714] px-1.5 py-0.5 rounded-full bg-[#e2b714]/10">
+            <span class="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(234, 179, 8, 0.082)', color: 'rgb(234, 179, 8)' }}>
               {item.source}
             </span>
             {item.category && (
-              <span class="text-[9px] text-[#71767b] bg-[#2f3336] px-1.5 py-0.5 rounded-full">{item.category}</span>
+              <span class="text-[9px] text-stone-600 bg-stone-800/50 px-1.5 py-0.5 rounded-full">{item.category}</span>
             )}
           </div>
-          <h4 class="text-xs font-medium text-[#e7e9ea] mb-1 leading-snug">{item.title}</h4>
-          <p class="text-[10px] text-[#71767b] leading-relaxed line-clamp-2">{item.summary || item.description || ''}</p>
+          <h4 class="text-xs font-medium text-stone-300 mb-1 leading-snug">{item.title}</h4>
+          <p class="text-[10px] text-stone-600 leading-relaxed line-clamp-2">{item.summary || item.description || ''}</p>
           {item.url && (
             <a href={item.url} target="_blank" rel="noopener"
-              class="text-[10px] text-[#4ecdc4] hover:underline mt-1 inline-block">Read →</a>
+              class="text-[10px] mt-1 inline-block" style={{ color: 'rgb(245, 158, 11)' }}>Read →</a>
           )}
         </div>
       ))}
@@ -570,22 +584,22 @@ function EvolvePanel({ activeRules, pendingProposals, recentAdoptions }: any) {
     <div class="space-y-4">
       {/* Active Rules */}
       <div>
-        <h3 class="text-xs font-semibold text-[#e7e9ea] mb-2">Active Thinking Rules</h3>
+        <h3 class="text-xs font-semibold text-stone-300 mb-2">Active Thinking Rules</h3>
         <div class="space-y-2">
           {(activeRules || []).map((rule: any) => (
             <a href={`/evolve/${rule.name}`} key={rule.name}
-              class="block bg-[#141a21] rounded-lg p-3 border border-[#2f3336] card-hover">
+              class="block glass-warm rounded-lg p-3 border border-stone-800/50 card-hover">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-xs font-medium text-[#e7e9ea]">{rule.name}</span>
-                <span class="text-[9px] text-[#71767b]">v{rule.version}</span>
+                <span class="text-xs font-medium text-stone-300">{rule.name}</span>
+                <span class="text-[9px] text-stone-600">v{rule.version}</span>
               </div>
               {rule.description && (
-                <p class="text-[10px] text-[#71767b] line-clamp-2">{rule.description}</p>
+                <p class="text-[10px] text-stone-600 line-clamp-2">{rule.description}</p>
               )}
             </a>
           ))}
           {(!activeRules || activeRules.length === 0) && (
-            <p class="text-xs text-[#71767b] italic">No active rules yet.</p>
+            <p class="text-xs text-stone-600 italic">No active rules yet.</p>
           )}
         </div>
       </div>
@@ -593,16 +607,16 @@ function EvolvePanel({ activeRules, pendingProposals, recentAdoptions }: any) {
       {/* Pending Proposals */}
       {(pendingProposals || []).length > 0 && (
         <div>
-          <h3 class="text-xs font-semibold text-[#e7e9ea] mb-2">Pending Proposals</h3>
+          <h3 class="text-xs font-semibold text-stone-300 mb-2">Pending Proposals</h3>
           <div class="space-y-2">
             {(pendingProposals || []).map((prop: any) => (
               <div key={prop.id}
-                class="bg-[#141a21] rounded-lg p-3 border border-[#e2b714]/30">
+                class="glass-warm rounded-lg p-3 border" style={{ borderColor: 'rgba(234, 179, 8, 0.3)' }}>
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-[9px] text-[#e2b714] font-medium">✧ Proposal</span>
-                  <span class="text-[9px] text-[#71767b]">v{prop.current_version} → v{prop.proposed_version}</span>
+                  <span class="text-[9px] font-medium" style={{ color: 'rgb(234, 179, 8)' }}>✧ Proposal</span>
+                  <span class="text-[9px] text-stone-600">v{prop.current_version} → v{prop.proposed_version}</span>
                 </div>
-                <p class="text-[10px] text-[#b0b3b8]">{prop.content || prop.reason || ''}</p>
+                <p class="text-[10px] text-stone-300">{prop.content || prop.reason || ''}</p>
               </div>
             ))}
           </div>
@@ -612,17 +626,17 @@ function EvolvePanel({ activeRules, pendingProposals, recentAdoptions }: any) {
       {/* Recent Adoptions */}
       {(recentAdoptions || []).length > 0 && (
         <div>
-          <h3 class="text-xs font-semibold text-[#e7e9ea] mb-2">Recent Adoptions</h3>
+          <h3 class="text-xs font-semibold text-stone-300 mb-2">Recent Adoptions</h3>
           <div class="space-y-2">
             {(recentAdoptions || []).slice(0, 5).map((a: any) => (
               <div key={a.id}
-                class="bg-[#141a21] rounded-lg p-3 border border-[#4ecdc4]/30">
+                class="glass-warm rounded-lg p-3 border" style={{ borderColor: 'rgba(245, 158, 11, 0.3)' }}>
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-[9px] text-[#4ecdc4] font-medium">✓ Adopted</span>
-                  <span class="text-[9px] text-[#71767b]">{a.name} v{a.version}</span>
+                  <span class="text-[9px] font-medium" style={{ color: 'rgb(245, 158, 11)' }}>✓ Adopted</span>
+                  <span class="text-[9px] text-stone-600">{a.name} v{a.version}</span>
                 </div>
                 {a.description && (
-                  <p class="text-[10px] text-[#71767b]">{a.description}</p>
+                  <p class="text-[10px] text-stone-600">{a.description}</p>
                 )}
               </div>
             ))}

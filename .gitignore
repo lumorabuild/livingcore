@@ -1,10 +1,92 @@
+```
+# Dependencies
 node_modules/
-.wrangler/
+
+# Build artifacts
 dist/
-*.log
+build/
+*.js.map
+*.ts.map
+
+# Environment
 .env
 .env.local
-debug_*.json
-.claude/
-*.local.json
-wrangler-account.json
+.env.*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Compiled and binary files
+*.exe
+*.dll
+*.so
+*.a
+*.o
+*.obj
+*.out
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+
+# Gradle
+.gradle/
+build/
+
+# MyPy
+.mypy_cache/
+
+# PyTest
+.pytest_cache/
+
+# Target (Rust, etc.)
+target/
+```

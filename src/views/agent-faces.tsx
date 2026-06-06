@@ -10,11 +10,11 @@ interface AgentFaceProps {
 
 // Kevin: angular, analytical - square jaw, geometric
 export function KevinFace({ mood = 'neutral', speaking = false, size = 80, showLabel = true }: AgentFaceProps) {
-  const skin = '#5a7a8c';
-  const hair = '#2d3748';
-  const eyeColor = '#4ecdc4';
-  const mouthColor = '#4a6670';
-  const bgColor = 'rgba(78, 205, 196, 0.08)';
+  const skin = '#d97706';
+  const hair = '#92400e';
+  const eyeColor = '#f59e0b';
+  const mouthColor = '#b45309';
+  const bgColor = 'rgba(245, 158, 11, 0.15)';
   const scale = size / 80;
 
   // Mouth paths: closed vs open (speaking)
@@ -33,8 +33,8 @@ export function KevinFace({ mood = 'neutral', speaking = false, size = 80, showL
   const eh = eyeH[mood] || 3;
 
   return (
-    <div class="flex flex-col items-center gap-1" style="user-select:none;">
-      <svg width={size} height={size} viewBox="0 0 80 80" style="filter:drop-shadow(0 2px 8px rgba(78,205,196,0.2));">
+    <div class="flex flex-col items-center gap-1 breathe" style="user-select:none;">
+      <svg width={size} height={size} viewBox="0 0 80 80" style={`filter:drop-shadow(0 4px 16px rgba(245,158,11,0.3));`}>
         <circle cx="40" cy="40" r="38" fill={bgColor} />
         {/* Hair */}
         <path d="M14 22 Q24 8 40 8 Q56 8 66 22 Q68 26 66 30 Q60 28 56 30 Q50 22 40 22 Q30 22 24 30 Q20 28 14 30 Q12 26 14 22Z" fill={hair} />
@@ -52,25 +52,25 @@ export function KevinFace({ mood = 'neutral', speaking = false, size = 80, showL
         <path d={mouthPath} stroke={mouthColor} stroke-width="2" fill="none" stroke-linecap="round" />
         {/* Speaking indicator dots */}
         {speaking && (
-          <g class="pulse-glow">
-            <circle cx="12" cy="45" r="2" fill={eyeColor} />
-            <circle cx="8" cy="42" r="1.5" fill={eyeColor} />
-            <circle cx="14" cy="39" r="1" fill={eyeColor} />
+          <g>
+            <circle cx="12" cy="45" r="2" fill={eyeColor} class="particle" />
+            <circle cx="8" cy="42" r="1.5" fill={eyeColor} class="particle" />
+            <circle cx="14" cy="39" r="1" fill={eyeColor} class="particle" />
           </g>
         )}
       </svg>
-      {showLabel && <span class="text-xs font-medium text-[#4ecdc4]">Kevin</span>}
+      {showLabel && <span class="text-xs font-medium" style={`color: rgb(245, 158, 11); text-shadow: rgba(245, 158, 11, 0.4) 0px 0px 12px;`}>Kevin</span>}
     </div>
   );
 }
 
 // Jenny: curved, exploratory - round face, softer
 export function JennyFace({ mood = 'neutral', speaking = false, size = 80, showLabel = true }: AgentFaceProps) {
-  const skin = '#8b6f7a';
-  const hair = '#3d2b3a';
-  const eyeColor = '#ff6b9d';
-  const mouthColor = '#6d5562';
-  const bgColor = 'rgba(255, 107, 157, 0.08)';
+  const skin = '#fb7185';
+  const hair = '#9f1239';
+  const eyeColor = '#f43f5e';
+  const mouthColor = '#be123c';
+  const bgColor = 'rgba(244, 63, 94, 0.15)';
   const scale = size / 80;
 
   const mouths: Record<string, [string, string]> = {
@@ -87,8 +87,8 @@ export function JennyFace({ mood = 'neutral', speaking = false, size = 80, showL
   const eh = eyeH[mood] || 3.5;
 
   return (
-    <div class="flex flex-col items-center gap-1" style="user-select:none;">
-      <svg width={size} height={size} viewBox="0 0 80 80" style="filter:drop-shadow(0 2px 8px rgba(255,107,157,0.2));">
+    <div class="flex flex-col items-center gap-1 breathe" style="user-select:none;">
+      <svg width={size} height={size} viewBox="0 0 80 80" style={`filter:drop-shadow(0 4px 16px rgba(244,63,94,0.3));`}>
         <circle cx="40" cy="40" r="38" fill={bgColor} />
         {/* Hair - wavy, softer */}
         <path d="M12 24 Q22 6 40 6 Q58 6 68 24 Q70 28 67 32 Q62 28 56 30 Q50 20 40 20 Q30 20 24 30 Q18 28 13 32 Q10 28 12 24Z" fill={hair} />
@@ -107,30 +107,30 @@ export function JennyFace({ mood = 'neutral', speaking = false, size = 80, showL
         <path d="M25 30 Q29 27 34 30" stroke={hair} stroke-width="1.5" fill="none" />
         <path d="M46 30 Q51 27 55 30" stroke={hair} stroke-width="1.5" fill="none" />
         {/* Rosy cheeks */}
-        <circle cx="22" cy="46" r="4" fill="rgba(255,107,157,0.15)" />
-        <circle cx="58" cy="46" r="4" fill="rgba(255,107,157,0.15)" />
+        <circle cx="22" cy="46" r="4" fill="rgba(244,63,94,0.2)" />
+        <circle cx="58" cy="46" r="4" fill="rgba(244,63,94,0.2)" />
         {/* Mouth */}
         <path d={mouthPath} stroke={mouthColor} stroke-width="2" fill="none" stroke-linecap="round" />
         {speaking && (
-          <g class="pulse-glow">
-            <circle cx="68" cy="45" r="2" fill={eyeColor} />
-            <circle cx="72" cy="42" r="1.5" fill={eyeColor} />
-            <circle cx="66" cy="39" r="1" fill={eyeColor} />
+          <g>
+            <circle cx="68" cy="45" r="2" fill={eyeColor} class="particle" />
+            <circle cx="72" cy="42" r="1.5" fill={eyeColor} class="particle" />
+            <circle cx="66" cy="39" r="1" fill={eyeColor} class="particle" />
           </g>
         )}
       </svg>
-      {showLabel && <span class="text-xs font-medium text-[#ff6b9d]">Jenny</span>}
+      {showLabel && <span class="text-xs font-medium" style={`color: rgb(244, 63, 94); text-shadow: rgba(244, 63, 94, 0.4) 0px 0px 12px;`}>Jenny</span>}
     </div>
   );
 }
 
 // Thinking wave bars
-export function ThinkingBars({ color = '#4ecdc4' }: { color?: string }) {
+export function ThinkingBars({ color = '#f59e0b' }: { color?: string }) {
   return (
     <div class="flex items-center gap-[3px] h-4">
-      <div class="thinking-bar w-[3px] h-3 rounded-full" style={`background:${color};`}></div>
-      <div class="thinking-bar w-[3px] h-4 rounded-full" style={`background:${color};`}></div>
-      <div class="thinking-bar w-[3px] h-[10px] rounded-full" style={`background:${color};`}></div>
+      <div class="thinking-bar w-[3px] h-3 rounded-full" style={`background:${color};box-shadow: ${color} 0px 0px 6px;`}></div>
+      <div class="thinking-bar w-[3px] h-4 rounded-full" style={`background:${color};box-shadow: ${color} 0px 0px 6px;`}></div>
+      <div class="thinking-bar w-[3px] h-[10px] rounded-full" style={`background:${color};box-shadow: ${color} 0px 0px 6px;`}></div>
     </div>
   );
 }
@@ -142,23 +142,23 @@ interface CoherenceGaugeProps {
 }
 export function CoherenceGauge({ value, size = 'md' }: CoherenceGaugeProps) {
   const pct = Math.round(value * 100);
-  const color = pct >= 60 ? '#4ecdc4' : pct >= 35 ? '#e2b714' : '#ff6b9d';
+  const color = pct >= 60 ? '#f59e0b' : pct >= 35 ? '#e2b714' : '#f43f5e';
   if (size === 'sm') {
     return (
       <div class="flex items-center gap-1">
-        <div class="w-10 h-1 bg-[#2f3336] rounded-full overflow-hidden">
-          <div class="h-full rounded-full transition-all duration-1000" style={`width:${pct}%;background:${color};`}></div>
+        <div class="w-10 h-1 bg-stone-800 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-1000 coherence-gradient"></div>
         </div>
-        <span class="text-[9px] font-mono text-[#71767b]">{pct}%</span>
+        <span class="text-[9px] font-mono text-stone-500">{pct}%</span>
       </div>
     );
   }
   return (
     <div class="flex items-center gap-2">
-      <div class="w-20 h-1.5 bg-[#2f3336] rounded-full overflow-hidden">
-        <div class="h-full rounded-full transition-all duration-1000" style={`width:${pct}%;background:${color};`}></div>
+      <div class="w-20 h-1.5 bg-stone-800 rounded-full overflow-hidden">
+        <div class="h-full rounded-full transition-all duration-1000 coherence-gradient"></div>
       </div>
-      <span class="text-xs font-mono text-[#71767b]">{pct}%</span>
+      <span class="text-xs font-mono text-stone-500">{pct}%</span>
     </div>
   );
 }
