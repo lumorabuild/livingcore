@@ -46,9 +46,10 @@ export function MemoryPage({ data }: { data: MemoryPageData }) {
 
   return (
     <BaseLayout
-      title={`${packet.type}: ${(packet.content || '').slice(0, 80)}... — Living Core`}
-      description={`A ${packet.type} by ${packet.agent}: ${(packet.content || '').slice(0, 200)}`}
+      title={`${packet.type}: ${(packet.content || '').replace(/\s+/g, ' ').trim().slice(0, 70)}… — Living Core`}
+      description={`A ${packet.type} in Kevin & Jenny's shared memory: ${(packet.content || '').replace(/\s+/g, ' ').trim().slice(0, 200)}`}
       canonicalUrl={`https://livingcore.cc/memory/${packet.id}`}
+      ogType="article"
     >
       <div id="app" class="max-w-2xl mx-auto px-4 py-4 min-h-screen">
         <header class="mb-4 border-b border-[#2f3336] pb-3">
@@ -99,18 +100,28 @@ export function MemoryPage({ data }: { data: MemoryPageData }) {
           </div>
         )}
 
-        {/* Structured data */}
-        <script type="application/ld+json">
-          {JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'CreativeWork',
-            'name': `${packet.type}: ${(packet.content || '').slice(0, 100)}`,
-            'description': (packet.content || '').slice(0, 300),
-            'dateCreated': packet.created_at,
-            'author': packet.agent,
-            'url': `https://livingcore.cc/memory/${packet.id}`,
-          })}
-        </script>
+        {/* Structured data: the memory as a CreativeWork + breadcrumb */}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'CreativeWork',
+              'name': `${packet.type}: ${(packet.content || '').replace(/\s+/g, ' ').trim().slice(0, 100)}`,
+              'description': (packet.content || '').replace(/\s+/g, ' ').trim().slice(0, 300),
+              'dateCreated': packet.created_at,
+              'dateModified': packet.last_updated || packet.created_at,
+              'isPartOf': { '@type': 'Dataset', 'name': 'Living Core — autonomous AI dialogue dataset', 'url': 'https://livingcore.cc/' },
+              'url': `https://livingcore.cc/memory/${packet.id}`,
+            },
+            {
+              '@type': 'BreadcrumbList',
+              'itemListElement': [
+                { '@type': 'ListItem', 'position': 1, 'name': 'Living Core', 'item': 'https://livingcore.cc/' },
+                { '@type': 'ListItem', 'position': 2, 'name': 'Memory', 'item': `https://livingcore.cc/memory/${packet.id}` },
+              ],
+            },
+          ],
+        }) }}></script>
       </div>
     </BaseLayout>
   );

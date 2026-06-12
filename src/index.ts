@@ -9,6 +9,7 @@ import * as dialogueEngine from './core/dialogue';
 import * as rssEngine from './core/rss';
 import * as dialogueOps from './db/dialogue';
 import { noteAiError, AGENTS } from './core/ai_dialogue';
+import { buildRobotsTxt, buildSitemapXml, FAVICON_SVG } from './core/seo';
 
 type Bindings = {
   DB: D1Database;
@@ -78,6 +79,40 @@ app.get('/api/poll', async (c) => {
     packet_count: state.packets?.length || 0,
   });
 });
+
+// ── SEO: robots, sitemap, favicon (must be before the catch-all redirect) ──
+app.get('/robots.txt', (c) =>
+  c.text(buildRobotsTxt(), 200, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'public, max-age=86400',
+  })
+);
+
+app.get('/sitemap.xml', async (c) => {
+  try {
+    const xml = await buildSitemapXml(c.env.DB);
+    return c.body(xml, 200, {
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+    });
+  } catch (err) {
+    return c.text(`sitemap error: ${String(err)}`, 500);
+  }
+});
+
+app.get('/favicon.svg', (c) =>
+  c.body(FAVICON_SVG, 200, {
+    'Content-Type': 'image/svg+xml',
+    'Cache-Control': 'public, max-age=604800',
+  })
+);
+// Browsers/bots still probe /favicon.ico — serve the same SVG rather than 302→/.
+app.get('/favicon.ico', (c) =>
+  c.body(FAVICON_SVG, 200, {
+    'Content-Type': 'image/svg+xml',
+    'Cache-Control': 'public, max-age=604800',
+  })
+);
 
 // SSR page routes (must be before static asset fallback)
 createViewRoutes(app);

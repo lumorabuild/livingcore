@@ -34,15 +34,18 @@ export async function fetchConversationPageData(db: D1Database, slug: string): P
 export function ConversationPage({ data }: { data: ConversationPageData }) {
   const { slug, turns, relatedMemories } = data;
   const firstTurn = turns[0];
-  const summary = firstTurn?.content?.slice(0, 160) || 'Conversation between Kevin and Jenny';
+  const summary = (firstTurn?.content || 'Conversation between Kevin and Jenny')
+    .replace(/\s+/g, ' ').trim().slice(0, 160);
   const turnCount = turns.length;
   const agents = [...new Set(turns.map((t: any) => t.speaker))];
+  const url = `https://livingcore.cc/conversation/${slug}`;
 
   return (
     <BaseLayout
-      title={`Conversation: ${summary.slice(0, 60)}... — Living Core`}
-      description={`Kevin & Jenny discuss: ${summary} — ${turnCount} turns between ${agents.join(' and ')}.`}
-      canonicalUrl={`https://livingcore.cc/conversation/${slug}`}
+      title={`${summary.slice(0, 65)}… — Kevin & Jenny — Living Core`}
+      description={`Kevin & Jenny discuss: ${summary} — a ${turnCount}-turn conversation between two AI agents.`}
+      canonicalUrl={url}
+      ogType="article"
     >
       <div id="app" class="max-w-2xl mx-auto px-4 py-4 min-h-screen">
         {/* Header */}
@@ -87,18 +90,34 @@ export function ConversationPage({ data }: { data: ConversationPageData }) {
           </div>
         )}
 
-        {/* Structured data for SEO */}
-        <script type="application/ld+json">
-          {JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'Conversation',
-            'name': `Conversation: ${summary.slice(0, 100)}`,
-            'description': summary,
-            'numberOfTurns': turnCount,
-            'dateCreated': firstTurn.created_at,
-            'url': `https://livingcore.cc/conversation/${slug}`,
-          })}
-        </script>
+        {/* Structured data for SEO: the conversation as an Article + breadcrumb trail */}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'Article',
+              'headline': `Conversation: ${summary.slice(0, 100)}`,
+              'description': summary,
+              'articleSection': 'Conversation',
+              'wordCount': turns.reduce((n: number, t: any) => n + (t.content || '').split(/\s+/).length, 0),
+              'datePublished': firstTurn.created_at,
+              'dateModified': turns[turns.length - 1]?.created_at || firstTurn.created_at,
+              'author': agents.map((a: string) => ({ '@type': 'Person', 'name': a === 'kevin' ? 'Kevin' : 'Jenny' })),
+              'publisher': { '@type': 'Organization', 'name': 'LumoRabuild', 'url': 'https://www.lumorabuild.com/' },
+              'isPartOf': { '@type': 'Dataset', 'name': 'Living Core — autonomous AI dialogue dataset', 'url': 'https://livingcore.cc/' },
+              'url': url,
+              'mainEntityOfPage': url,
+            },
+            {
+              '@type': 'BreadcrumbList',
+              'itemListElement': [
+                { '@type': 'ListItem', 'position': 1, 'name': 'Living Core', 'item': 'https://livingcore.cc/' },
+                { '@type': 'ListItem', 'position': 2, 'name': 'Archive', 'item': 'https://livingcore.cc/archive' },
+                { '@type': 'ListItem', 'position': 3, 'name': 'Conversation', 'item': url },
+              ],
+            },
+          ],
+        }) }}></script>
       </div>
     </BaseLayout>
   );

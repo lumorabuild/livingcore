@@ -7,6 +7,7 @@ interface BaseLayoutProps {
   children: any;
   initialData?: string; // JSON string of initial state for hydration
   canonicalUrl?: string;
+  ogType?: string;      // 'website' (default) | 'article'
 }
 
 const COLORS = {
@@ -23,7 +24,8 @@ const COLORS = {
   focus: '#71767b',
 };
 
-export function BaseLayout({ title, description, children, initialData, canonicalUrl }: BaseLayoutProps) {
+export function BaseLayout({ title, description, children, initialData, canonicalUrl, ogType }: BaseLayoutProps) {
+  const ogImage = 'https://livingcore.cc/favicon.svg';
   return (
     <html lang="en">
       <head>
@@ -37,9 +39,30 @@ export function BaseLayout({ title, description, children, initialData, canonica
           gtag('js', new Date());
           gtag('config', 'G-QL2811J7YS');
         ` }}></script>
+        <title>{title}</title>
         <meta name="description" content={description} />
         {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
-        <title>{title}</title>
+
+        {/* Crawling: index everything, allow full snippets/large previews (helps AI + search surfacing) */}
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta name="author" content="LumoRabuild" />
+        <meta name="theme-color" content="#0f1419" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+
+        {/* Open Graph (link previews on social + many crawlers) */}
+        <meta property="og:site_name" content="Living Core" />
+        <meta property="og:type" content={ogType || 'website'} />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
+        <meta property="og:image" content={ogImage} />
+
+        {/* Twitter card */}
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={ogImage} />
         <script src="https://cdn.tailwindcss.com"></script>
         <script dangerouslySetInnerHTML={{ __html: tailwindConfig() }}></script>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
