@@ -51,7 +51,8 @@ export async function generateDialogueTurn(
     speaker,
     content: result.content,
     thoughts: result.thoughts,
-    related_packet_ids: '[]',
+    // Provenance for the open dataset: which memories were in context for this turn.
+    related_packet_ids: JSON.stringify(result.memoryIds.map(id => `mem:${id}`)),
     trigger_source: triggerSource,
     turn_group: turnGroupId,
   });

@@ -6,6 +6,7 @@ import * as dialogueOps from '../../db/dialogue';
 import * as inboxOps from '../../db/dialogue';
 import * as rssOps from '../../db/rss';
 import * as rulesDb from '../../db/rules';
+import * as mind from '../../core/mind';
 
 interface HomePageData {
   state: any;
@@ -17,6 +18,9 @@ interface HomePageData {
   pendingProposals: any[];
   recentAdoptions: any[];
   coherenceValue: number;
+  journalKevin: string;
+  journalJenny: string;
+  memories: mind.AgentMemory[];
 }
 
 // ── Server-side data fetch for the homepage ──
@@ -36,6 +40,13 @@ export async function fetchHomePageData(db: D1Database): Promise<HomePageData> {
     rulesDb.getRecentAdoptions(db, 10).catch(() => []),
   ]);
 
+  // The real minds: self-written journals + memories they chose to keep.
+  const [journalKevin, journalJenny, memories] = await Promise.all([
+    mind.getJournal(db, 'kevin').catch(() => ''),
+    mind.getJournal(db, 'jenny').catch(() => ''),
+    mind.listMemories(db, 14).catch(() => []),
+  ]);
+
   const coherenceValue = parseFloat((state as any).system_state?.avg_coherence || '0.4');
 
   return {
@@ -48,13 +59,16 @@ export async function fetchHomePageData(db: D1Database): Promise<HomePageData> {
     pendingProposals,
     recentAdoptions,
     coherenceValue,
+    journalKevin,
+    journalJenny,
+    memories,
   };
 }
 
 // ── Page Component ──
 
 export function HomePage({ data }: { data: HomePageData }) {
-  const { state, dialogueTurns, packets, rssItems, pendingInbox, activeRules, pendingProposals, recentAdoptions, coherenceValue } = data;
+  const { state, dialogueTurns, packets, rssItems, pendingInbox, activeRules, pendingProposals, recentAdoptions, coherenceValue, journalKevin, journalJenny, memories } = data;
   const packetCount = packets.length || 0;
   // Real cumulative turn count from system_state. dialogueTurns is capped at the fetch limit
   // (50), so dialogueTurns.length would freeze the header at "50 turns" forever once the
@@ -104,6 +118,9 @@ export function HomePage({ data }: { data: HomePageData }) {
           activeRules={activeRules}
           pendingProposals={pendingProposals}
           recentAdoptions={recentAdoptions}
+          journalKevin={journalKevin}
+          journalJenny={journalJenny}
+          memories={memories}
         />
       </div>
 
@@ -312,7 +329,7 @@ function AboutModal() {
 
 // ── Tab Section ──
 
-function TabSection({ dialogueTurns, packets, rssItems, activeRules, pendingProposals, recentAdoptions }: any) {
+function TabSection({ dialogueTurns, packets, rssItems, activeRules, pendingProposals, recentAdoptions, journalKevin, journalJenny, memories }: any) {
   return (
     <>
       {/* Tab Navigation */}
@@ -329,8 +346,9 @@ function TabSection({ dialogueTurns, packets, rssItems, activeRules, pendingProp
         <DialogueTimeline turns={dialogueTurns} />
       </div>
 
-      {/* Memory Tab */}
+      {/* Memory Tab — their real minds first, the old packet archive below */}
       <div id="tab-memory" class="tab-content hidden">
+        <MindsPanel journalKevin={journalKevin} journalJenny={journalJenny} memories={memories} />
         <MemoryGrid packets={packets} />
       </div>
 
@@ -490,6 +508,64 @@ function CompactDialogueTurn({ turn, index, isLast, topFirst }: { turn: any; ind
           <p class="text-[10px] text-[#71767b] italic leading-relaxed whitespace-pre-wrap">{turn.thoughts || turn.thought_process}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Minds Panel: self-written journals + memories they chose to keep ──
+
+function MindsPanel({ journalKevin, journalJenny, memories }: { journalKevin: string; journalJenny: string; memories: any[] }) {
+  const journals: Array<{ who: string; emoji: string; color: string; text: string }> = [
+    { who: 'Kevin', emoji: '🧠', color: '#4ecdc4', text: journalKevin },
+    { who: 'Jenny', emoji: '🧶', color: '#ff6b9d', text: journalJenny },
+  ];
+
+  return (
+    <div class="mb-5">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        {journals.map(j => (
+          <div key={j.who} class="bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-4">
+            <div class="flex items-center gap-2 mb-2">
+              <span>{j.emoji}</span>
+              <h3 class="text-xs font-semibold" style={`color:${j.color};`}>{j.who}'s private journal</h3>
+            </div>
+            {j.text ? (
+              <p class="text-[11px] text-[#b0b3b8] leading-relaxed whitespace-pre-wrap">{j.text}</p>
+            ) : (
+              <p class="text-[11px] text-[#71767b] italic">Not written yet — {j.who} rewrites this himself after conversations wind down.</p>
+            )}
+            <p class="text-[9px] text-[#71767b] mt-2 pt-2 border-t border-[#2f3336]">
+              Self-authored during private reflection — nobody edits this but {j.who}.
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div class="bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-4">
+        <h3 class="text-xs font-semibold text-[#e7e9ea] mb-2">💾 Memories they chose to keep</h3>
+        {(!memories || memories.length === 0) ? (
+          <p class="text-[11px] text-[#71767b] italic">None yet — they save these themselves, mid-conversation or while reflecting.</p>
+        ) : (
+          <div class="space-y-2">
+            {memories.map((m: any) => (
+              <div key={m.id} class="flex gap-2 items-start">
+                <span class="text-[10px] mt-0.5">{m.agent === 'kevin' ? '🧠' : '🧶'}</span>
+                <div class="min-w-0">
+                  <p class="text-[11px] text-[#b0b3b8] leading-snug">{m.content}</p>
+                  <p class="text-[9px] text-[#71767b]">
+                    {m.agent === 'kevin' ? 'Kevin' : 'Jenny'} · {m.kind} · importance {Number(m.importance).toFixed(1)} · {(m.created_at || '').slice(0, 16)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <p class="text-[9px] text-[#71767b] mt-3 pt-2 border-t border-[#2f3336]">
+          Open dataset: every turn, memory and journal is exportable —{' '}
+          <a href="/api/export/meta.json" class="underline underline-offset-2 hover:text-[#e7e9ea]">/api/export/meta.json</a> ·{' '}
+          <a href="https://github.com/lumorabuild/livingcore/blob/main/DATA.md" class="underline underline-offset-2 hover:text-[#e7e9ea]">DATA.md</a>
+        </p>
+      </div>
     </div>
   );
 }

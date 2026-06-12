@@ -167,6 +167,14 @@ export async function recallMemories(
   return chosen;
 }
 
+/** Newest memories first — for the site's Memory tab and the dataset export. */
+export async function listMemories(db: D1Database, limit: number = 100): Promise<AgentMemory[]> {
+  await ensureMindSchema(db);
+  const rows = await db.prepare('SELECT * FROM agent_memories ORDER BY id DESC LIMIT ?')
+    .bind(Math.min(1000, Math.max(1, limit))).all<AgentMemory>();
+  return rows.results || [];
+}
+
 /** Keep each agent's memory bounded — drop the least important, oldest rows. */
 export async function pruneMemories(db: D1Database, agent: 'kevin' | 'jenny'): Promise<void> {
   await db.prepare(

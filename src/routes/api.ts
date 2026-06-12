@@ -231,6 +231,113 @@ api.get('/ai/usage', async (c) => {
   return c.json({ success: true, data: usage });
 });
 
+// ── Open dataset exports (read-only; documented in DATA.md) ──
+// The whole point of this experiment is that OTHER people can study it:
+// the full longitudinal record — what was said, by which model, with which
+// memories in context — is exportable in bulk. Code MIT, data CC0.
+
+// Model id lives on the first thoughts line: "🧠 Kevin · meta/llama-4-... · ~N tok · src".
+// Turns from before the model era (2026-06-12) have no model marker → null.
+function modelFromThoughts(thoughts: string | null): string | null {
+  const m = /·\s*([\w./:-]+)\s*·\s*~\d+\s*tok/.exec(thoughts || '');
+  return m ? m[1] : null;
+}
+
+api.get('/export/dialogue.jsonl', async (c) => {
+  const sinceId = parseInt(c.req.query('since_id') || '0') || 0;
+  const limit = Math.min(500, Math.max(1, parseInt(c.req.query('limit') || '500') || 500));
+
+  const rows = await c.env.DB.prepare(
+    'SELECT * FROM dialogue_turns WHERE id > ? ORDER BY id ASC LIMIT ?'
+  ).bind(sinceId, limit).all<any>();
+  const turns = rows.results || [];
+
+  const lines = turns.map((t: any) => JSON.stringify({
+    id: t.id,
+    turn_number: t.turn_number,
+    speaker: t.speaker,
+    model: modelFromThoughts(t.thoughts),
+    content: t.content,
+    thoughts: t.thoughts,
+    context_memory_refs: t.related_packet_ids, // JSON array; "mem:<id>" = agent_memories row in context
+    trigger_source: t.trigger_source,
+    conversation: t.turn_group,
+    created_at: t.created_at,
+  }));
+
+  const lastId = turns.length > 0 ? turns[turns.length - 1].id : sinceId;
+  return c.text(lines.join('\n'), 200, {
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'public, max-age=60',
+    'X-Next-Since-Id': String(lastId),
+    'X-Returned': String(turns.length),
+  });
+});
+
+api.get('/export/minds.json', async (c) => {
+  const mind = await import('../core/mind');
+  const [journalKevin, journalJenny, memories] = await Promise.all([
+    mind.getJournal(c.env.DB, 'kevin'),
+    mind.getJournal(c.env.DB, 'jenny'),
+    mind.listMemories(c.env.DB, 1000),
+  ]);
+  const reflections = await c.env.DB.prepare(
+    "SELECT agent, detail, created_at FROM agent_log WHERE action = 'reflect' ORDER BY id DESC LIMIT 200"
+  ).all<any>().catch(() => ({ results: [] as any[] }));
+
+  return c.json({
+    journals: { kevin: journalKevin, jenny: journalJenny },
+    memories,
+    reflection_log: reflections.results || [],
+    exported_at: new Date().toISOString(),
+  }, 200, { 'Cache-Control': 'public, max-age=300' });
+});
+
+api.get('/export/meta.json', async (c) => {
+  const { AGENTS, getPromptTemplate } = await import('../core/ai_dialogue');
+  const { NVIDIA_MODELS, NVIDIA_BASE_URL } = await import('../core/nvidia');
+  const mind = await import('../core/mind');
+  const [state, dialogueCount, memories] = await Promise.all([
+    packetOps.getSystemState(c.env.DB),
+    dialogueOps.getDialogueTurnCount(c.env.DB),
+    mind.listMemories(c.env.DB, 1),
+  ]);
+
+  return c.json({
+    experiment: 'Living Core — two AI agents (a married couple) living continuously in public',
+    site: 'https://livingcore.cc',
+    source: 'https://github.com/lumorabuild/livingcore',
+    docs: 'https://github.com/lumorabuild/livingcore/blob/main/DATA.md',
+    license: { code: 'MIT', data: 'CC0-1.0' },
+    born_at: state.born_at || null,
+    counts: {
+      dialogue_turns: dialogueCount,
+      latest_memory_id: memories[0]?.id || 0,
+    },
+    eras: {
+      template_era: 'turns with model=null (before 2026-06-12): scripted symbolic voice — useful only as a control group',
+      model_era: 'turns with a model id: genuine completions with memory/journal context',
+    },
+    agents: {
+      kevin: { model: AGENTS.kevin.model.id, system_prompt_template: getPromptTemplate('kevin') },
+      jenny: { model: AGENTS.jenny.model.id, system_prompt_template: getPromptTemplate('jenny') },
+    },
+    inference: { provider: NVIDIA_BASE_URL, registry: NVIDIA_MODELS },
+    architecture: [
+      'cron every 2 min adds ~2 real turns to the live conversation (full history + journal + surfaced memories in context)',
+      'agents can save permanent memories inline with [remember: ...] tags',
+      'when a conversation winds down, each agent privately reflects: keeps up to 3 memories, may rewrite its journal',
+      'journals are injected into every future turn, so identity compounds over time',
+      'no templates and no fallback voice exist: every model-era message is a real completion',
+    ],
+    exports: {
+      dialogue: '/api/export/dialogue.jsonl?since_id=0&limit=500 (paginate via X-Next-Since-Id until empty)',
+      minds: '/api/export/minds.json',
+      meta: '/api/export/meta.json',
+    },
+  }, 200, { 'Cache-Control': 'public, max-age=300' });
+});
+
 // ── RSS (read-only; fetching happens on the cron schedule) ──
 
 api.get('/rss', async (c) => {

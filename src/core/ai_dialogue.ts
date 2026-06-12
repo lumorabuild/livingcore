@@ -168,6 +168,13 @@ export interface SpeakResult {
   content: string;
   thoughts: string;
   tokens: number;
+  /** IDs of the agent_memories rows that were in context for this turn (provenance). */
+  memoryIds: number[];
+}
+
+/** The exact system-prompt template, for the open-dataset meta export (DATA.md). */
+export function getPromptTemplate(agent: 'kevin' | 'jenny'): string {
+  return buildSystemPrompt(agent, '<agent-written journal is injected here>', []);
 }
 
 /**
@@ -252,5 +259,10 @@ export async function speakAsAgent(
   const thoughtLines = [`${cfg.emoji} ${cfg.name} · ${cfg.model.id} · ~${totalTokens} tok · ${opts.source}`];
   for (const s of saved) thoughtLines.push(`💾 saved memory: ${s.slice(0, 80)}`);
 
-  return { content: finalText, thoughts: thoughtLines.join('\n'), tokens: totalTokens };
+  return {
+    content: finalText,
+    thoughts: thoughtLines.join('\n'),
+    tokens: totalTokens,
+    memoryIds: memories.map(m => m.id),
+  };
 }
