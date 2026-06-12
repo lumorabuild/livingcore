@@ -18,9 +18,27 @@ export interface NvidiaModelInfo {
   notes: string;
 }
 
-// All 6 validated models. livingcore uses llama-4-maverick (Kevin) and
+// All 8 validated models. livingcore uses llama-4-maverick (Kevin) and
 // ministral-14b (Jenny); the rest are ready for other projects via this registry.
 export const NVIDIA_MODELS: Record<string, NvidiaModelInfo> = {
+  'llama-3.2-11b-vision': {
+    id: 'meta/llama-3.2-11b-vision-instruct',
+    label: 'Llama 3.2 11B Vision',
+    family: 'meta',
+    goodTemp: 0.8,
+    maxTokens: 1024,
+    notes: 'Fastest of the set and supports vision (image_url content parts; ' +
+      'nvidiaChat currently sends text-only messages)',
+  },
+  'mistral-nemotron': {
+    id: 'mistralai/mistral-nemotron',
+    label: 'Mistral Nemotron',
+    family: 'mistral',
+    goodTemp: 0.7,
+    maxTokens: 1024,
+    notes: 'Mistral+NVIDIA collab. Fast once warm, but cold starts can exceed 90s — ' +
+      'use generous timeouts on the first call (verified 2026-06-12)',
+  },
   'nemotron-nano-8b': {
     id: 'nvidia/llama-3.1-nemotron-nano-8b-v1',
     label: 'Nemotron Nano 8B',
