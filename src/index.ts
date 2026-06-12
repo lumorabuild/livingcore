@@ -38,8 +38,22 @@ app.get('/health', (c) => {
   });
 });
 
-// Manual cron trigger (HTTP) — for debugging
+// Manual cron trigger (HTTP) — for debugging. The repo is public, so this URL is
+// known: allow at most one HTTP-triggered cycle per minute so it can't be hammered
+// to drain the daily AI budget. (The real schedule calls runCronCycle directly.)
 app.get('/__cron', async (c) => {
+  const row = await c.env.DB.prepare("SELECT value FROM system_state WHERE key = 'last_manual_cron'")
+    .first<{ value: string }>();
+  const last = row ? Date.parse(row.value) || 0 : 0;
+  if (Date.now() - last < 60_000) {
+    return c.json({ success: false, error: 'rate limited — try again in a minute' }, 429);
+  }
+  const now = new Date();
+  await c.env.DB.prepare(
+    `INSERT INTO system_state (key, value, updated_at) VALUES ('last_manual_cron', ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  ).bind(now.toISOString(), now.toISOString().replace('T', ' ').slice(0, 19)).run();
+
   const result = await runCronCycle(c.env.DB, c.env.NVIDIA_API_KEY);
   return c.json(result);
 });

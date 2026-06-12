@@ -1,4 +1,7 @@
 // REST API Routes for Living Core — Phase 0 (Dialogue + Inbox + Archive)
+// NOTE: this repo is PUBLIC and these routes are unauthenticated. Only read
+// endpoints and the intended visitor channel (inbox) belong here — anything
+// destructive or budget-burning must not be exposed.
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import * as packetOps from '../db/packet';
@@ -6,8 +9,6 @@ import * as rssOps from '../db/rss';
 import * as coherenceFunc from '../core/coherence';
 import * as dialogueOps from '../db/dialogue';
 import * as dialogueEngine from '../core/dialogue';
-import * as rssEngine from '../core/rss';
-import { processInput } from '../core/loop';
 import { getAllCategories } from '../core/categories';
 
 type Bindings = { DB: D1Database; NVIDIA_API_KEY: string };
@@ -88,17 +89,6 @@ api.get('/packets/:id', async (c) => {
     if (cp) connectedPackets.push(cp);
   }
   return c.json({ success: true, data: { packet, connections, connectedPackets } });
-});
-
-// ── Input (existing experience processing) ──
-
-api.post('/input', async (c) => {
-  const body = await c.req.json<{ content: string }>();
-  if (!body.content || body.content.trim().length === 0) {
-    return c.json({ success: false, error: 'Content is required' }, 400);
-  }
-  const result = await processInput(c.env.DB, body.content.trim());
-  return c.json({ success: true, data: result });
 });
 
 // ── Idea Inbox ──
@@ -241,12 +231,7 @@ api.get('/ai/usage', async (c) => {
   return c.json({ success: true, data: usage });
 });
 
-// ── RSS ──
-
-api.post('/rss/fetch', async (c) => {
-  const result = await rssEngine.processRSSFeeds(c.env.DB);
-  return c.json({ success: true, data: result });
-});
+// ── RSS (read-only; fetching happens on the cron schedule) ──
 
 api.get('/rss', async (c) => {
   const limit = parseInt(c.req.query('limit') || '30');
@@ -275,67 +260,11 @@ api.get('/categories/:id/packets', async (c) => {
   return c.json({ success: true, data: packets });
 });
 
-// ── Categorize existing packets (one-time migration helper) ──
-
-api.post('/admin/categorize', async (c) => {
-  const { classifyText } = await import('../core/categories');
-  const packets = await packetOps.getAllPackets(c.env.DB);
-  let updated = 0;
-  for (const p of packets) {
-    if (p.primary_category) continue; // already categorized
-    const result = classifyText(p.content);
-    await packetOps.updatePacket(c.env.DB, p.id, {
-      primary_category: result.primary,
-      secondary_categories: result.secondaries
-    });
-    updated++;
-  }
-  return c.json({ success: true, data: { updated, total: packets.length } });
-});
-
-// ── Manual Think (trigger next turn) ──
-
-api.post('/think', async (c) => {
-  const raw = await c.req.text().catch(() => '{}');
-  const body: Record<string, string> = JSON.parse(raw);
-  const speaker: 'kevin' | 'jenny' = body.speaker === 'jenny' ? 'jenny' : 'kevin';
-  const content = body.content || 'Continue our conversation...';
-
-  const result = await dialogueEngine.generateDialogueTurn(
-    c.env.DB, content, speaker, undefined, 'manual', c.env.NVIDIA_API_KEY
-  );
-
-  if (!result) {
-    return c.json({ success: false, error: 'AI unavailable — no turn generated (no template fallback exists)' }, 503);
-  }
-
-  // Chain continues in background
-  runInBackground(c, async () => {
-    await dialogueEngine.continueDialogueChain(
-      c.env.DB, result.nextSpeaker, result.turnGroup, 2, c.env.NVIDIA_API_KEY, 'manual'
-    );
-  });
-
-  return c.json({ success: true, data: result });
-});
-
-// ── Reset (dev only) ──
-
-api.post('/reset', async (c) => {
-  await c.env.DB.prepare('DELETE FROM best_ideas').run();
-  await c.env.DB.prepare('DELETE FROM inbox').run();
-  await c.env.DB.prepare('DELETE FROM dialogue_turns').run();
-  await c.env.DB.prepare('DELETE FROM agent_log').run();
-  await c.env.DB.prepare('DELETE FROM connections').run();
-  await c.env.DB.prepare('DELETE FROM packets').run();
-  await c.env.DB.prepare("UPDATE system_state SET value = '0' WHERE key IN ('total_interactions', 'total_rewrites', 'total_dialogue_turns', 'turn_sequence')").run();
-  await c.env.DB.prepare("UPDATE system_state SET value = '0.0' WHERE key = 'avg_coherence'").run();
-  await c.env.DB.prepare("UPDATE system_state SET value = '0' WHERE key = 'concept_count'").run();
-  await c.env.DB.prepare("UPDATE system_state SET value = '' WHERE key = 'born_at'").run();
-  return c.json({ success: true, message: 'System reset complete (all dialogue, inbox, packets cleared)' });
-});
-
 // ── Self-Editing Rule System ──
+// (The old unauthenticated POST /reset, /think, /input, /admin/categorize and
+//  /rss/fetch routes are intentionally GONE: this is a public repo, and those
+//  let anyone wipe the couple's accumulated life, inject topics into the live
+//  feed, or burn the daily AI budget. Local resets: wrangler d1 execute --local.)
 
 api.get('/rules', async (c) => {
   const { getActiveRules } = await import('../db/rules');
