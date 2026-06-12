@@ -1,18 +1,19 @@
 // Living Core — Main Worker Entry
-// Full SSR frontend + API backend
+// Full SSR frontend + API backend. Kevin & Jenny think through the NVIDIA API
+// (OpenAI-compatible, free tier) — see src/core/nvidia.ts for the model registry.
 
 import { Hono } from 'hono';
 import api from './routes/api';
 import { createViewRoutes } from './routes/views';
 import * as dialogueEngine from './core/dialogue';
 import * as rssEngine from './core/rss';
-import * as rssOps from './db/rss';
 import * as dialogueOps from './db/dialogue';
+import { noteAiError, AGENTS } from './core/ai_dialogue';
 
 type Bindings = {
   DB: D1Database;
   ASSETS: Fetcher;
-  AI: Ai;
+  NVIDIA_API_KEY: string;
 };
 
 type ScheduledController = {
@@ -26,19 +27,20 @@ app.get('/health', (c) => {
   return c.json({
     status: 'alive',
     name: 'Living Core',
-    version: '3.0.0',
-    agents: ['Kevin (The Grounder)', 'Jenny (The Weaver)'],
-    tagline: 'SSR frontend — SEO-friendly living thought garden',
+    version: '4.0.0',
+    agents: [
+      `Kevin (${AGENTS.kevin.model.id})`,
+      `Jenny (${AGENTS.jenny.model.id})`,
+    ],
+    brain: 'NVIDIA API (integrate.api.nvidia.com) — no templates, no scripted fallback',
     categories: 14,
-    rss_feeds: 18
+    rss_feeds: 18,
   });
 });
 
 // Manual cron trigger (HTTP) — for debugging
-// Cron may use the AI brain too, but capped (CRON_AI_CAP) so it can't drain the
-// daily budget — user-driven inbox conversations always keep brain budget in reserve.
 app.get('/__cron', async (c) => {
-  const result = await runCronCycle(c.env.DB, c.env.AI);
+  const result = await runCronCycle(c.env.DB, c.env.NVIDIA_API_KEY);
   return c.json(result);
 });
 
@@ -90,10 +92,7 @@ app.all('*', (c) => {
 // only `default.fetch` / `default.scheduled` are. That mistake silently stopped
 // the autonomous conversation.
 async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledController) {
-  // env.AI is passed but only USED when ai_dialogue.ts AI_ENABLED is true. While it's
-  // false (the default), every cron cycle is the free symbolic voice — zero neurons,
-  // zero charge. Flip AI_ENABLED to re-enable the brain everywhere; no other change needed.
-  const work = runCronCycle(env.DB, env.AI);
+  const work = runCronCycle(env.DB, env.NVIDIA_API_KEY);
   // Prefer waitUntil, but also await so the cycle reliably completes (local dev's
   // scheduled emulation doesn't always provide a usable waitUntil).
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(work);
@@ -101,56 +100,82 @@ async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledCon
 }
 
 // ── Shared cron logic ──
-// Conversations are NOT capped at one short burst per cycle. A topic keeps going
-// across cron cycles (same turn_group) — building for many turns over many minutes,
-// like a real couple — until it reaches a soft cap or naturally winds down, then they
-// move to a fresh topic. Each cycle only adds a few turns, so a single cron invocation
-// stays fast (no Worker timeout) and the data grows at a steady, bounded rate.
+// Every cycle is the real brain — no dice rolls, no symbolic fallback. A topic keeps
+// going across cron cycles (same turn_group) until it reaches a soft cap or winds
+// down naturally. When a conversation ends, both agents privately REFLECT on it
+// (memories + journal — that's the growth loop), then a fresh one begins.
 
-const TURNS_PER_CYCLE = 3;     // turns added to the live conversation each cron tick
-const CONVO_SOFT_CAP = 36;     // a topic can run this many turns before they move on
+const TURNS_PER_CYCLE = 2;        // turns added to the live conversation each cron tick
+const CONVO_SOFT_CAP = 36;        // a topic can run this many turns before they move on
 const KEEP_TALKING_CHANCE = 0.85; // each cycle, odds they stay on the same topic
 
-async function runCronCycle(db: D1Database, ai?: Ai) {
-  try {
-    // Use the real AI brain on ~85% of cycles so visitors actually see genuine Kevin &
-    // Jenny dialogue, not the symbolic fallback. The hard cron budget cap (180 messages/day,
-    // 3 per cycle) means only ~60 AI cycles succeed before it exhausts — roughly the first
-    // 2 hours of each day. After that the daily cap auto-throttles to the symbolic voice
-    // for the rest of the day; it resets at midnight UTC.
-    const cycleAi = ai && Math.random() < 0.85 ? ai : undefined;
+function randomSpeaker(): 'kevin' | 'jenny' {
+  return Math.random() < 0.5 ? 'kevin' : 'jenny';
+}
 
-    // Occasionally check the RSS feeds (~every 20 min). Fresh news starts a new topic
-    // thread; we don't hammer 18 external feeds every couple of minutes.
-    let rssResult: any = { turn_group: null, discussion_turns: 0 };
+async function runCronCycle(db: D1Database, apiKey?: string) {
+  try {
+    if (!apiKey) {
+      await noteAiError(db, 'cron: NVIDIA_API_KEY is not configured');
+      return { success: false, error: 'NVIDIA_API_KEY is not configured' };
+    }
+
+    // 0) Recover inbox items whose chain died mid-flight (stuck 'processing').
+    await db.prepare(
+      "UPDATE inbox SET status = 'pending' WHERE status = 'processing' AND created_at < datetime('now', '-15 minutes')"
+    ).run().catch(() => {});
+
+    // 1) Visitor notes get priority — guaranteed pickup even if the original
+    //    request-time chain failed (previously they could be stranded forever).
+    const pending = await dialogueOps.getInboxItems(db, { limit: 1, status: 'pending' });
+    if (pending.length > 0) {
+      const item = pending[0];
+      const group = dialogueEngine.generateId();
+      await dialogueOps.updateInboxStatus(db, item.id, 'processing', group);
+      const seed = `[A visitor named "${(item.author || 'anonymous').slice(0, 60)}" left you two a note: "${item.content.slice(0, 600)}"]`;
+      const first = await dialogueEngine.generateDialogueTurn(db, seed, randomSpeaker(), group, 'inbox', apiKey);
+      if (first) {
+        await dialogueEngine.continueDialogueChain(db, first.nextSpeaker, group, TURNS_PER_CYCLE, apiKey, 'inbox');
+      } else {
+        await dialogueOps.updateInboxStatus(db, item.id, 'pending'); // brain unavailable — retry next cycle
+      }
+      return { success: true, outcome: 'inbox' };
+    }
+
+    // 2) Occasionally check the RSS feeds (~every 20 min on average). Fresh news
+    //    starts a new topic thread; we don't hammer 18 external feeds every 2 minutes.
     if (Math.random() < 0.1) {
-      rssResult = await rssEngine.processRSSFeeds(db);
+      const rssResult = await rssEngine.processRSSFeeds(db, apiKey);
+      if (rssResult.turn_group && rssResult.discussion_turns > 0) {
+        await extendConversation(db, rssResult.turn_group, apiKey);
+        return { success: true, outcome: 'news' };
+      }
+    }
+
+    // 3) The living conversation: continue the current topic, or close it out
+    //    (reflection → memories + journals) and open a fresh one.
+    const latest = await dialogueOps.getDialogueTurns(db, { limit: 1 });
+    const activeGroup = latest.length > 0 ? latest[0].turn_group : null;
+    let count = 0;
+    if (activeGroup) {
+      count = (await dialogueOps.getDialogueTurns(db, { group: activeGroup, limit: CONVO_SOFT_CAP + 10 })).length;
     }
 
     let outcome: string;
-    if (rssResult.turn_group && rssResult.discussion_turns > 0) {
-      // Fresh news → extend the brand-new news thread a little this cycle.
-      await extendConversation(db, rssResult.turn_group, cycleAi);
-      outcome = 'news';
+    if (activeGroup && count < CONVO_SOFT_CAP && Math.random() < KEEP_TALKING_CHANCE) {
+      await extendConversation(db, activeGroup, apiKey);
+      outcome = 'continued';
     } else {
-      // Find the conversation in progress (the newest turn's group).
-      const latest = await dialogueOps.getDialogueTurns(db, { limit: 1 });
-      const activeGroup = latest.length > 0 ? latest[0].turn_group : null;
-      let count = 0;
+      // Growth first: both agents privately digest the finished conversation.
       if (activeGroup) {
-        const groupTurns = await dialogueOps.getDialogueTurns(db, { group: activeGroup, limit: CONVO_SOFT_CAP + 10 });
-        count = groupTurns.length;
+        await dialogueEngine.reflectOnGroup(db, apiKey, activeGroup).catch(() => {});
       }
-
-      // Keep talking on the same topic unless it has run its course (soft cap) or it
-      // naturally winds down (random) — then start a fresh topic.
-      if (activeGroup && count < CONVO_SOFT_CAP && Math.random() < KEEP_TALKING_CHANCE) {
-        await extendConversation(db, activeGroup, cycleAi);
-        outcome = 'continued';
-      } else {
-        await generateStandaloneConversation(db, cycleAi);
-        outcome = 'new';
+      const group = dialogueEngine.generateId();
+      const first = await dialogueEngine.generateDialogueTurn(db, '', randomSpeaker(), group, 'cron', apiKey);
+      if (first) {
+        await dialogueEngine.continueDialogueChain(db, first.nextSpeaker, group, TURNS_PER_CYCLE - 1, apiKey, 'cron');
       }
+      outcome = 'new';
     }
 
     await checkPendingRules(db).catch(() => {});
@@ -162,68 +187,11 @@ async function runCronCycle(db: D1Database, ai?: Ai) {
 }
 
 // Add a few more turns to an existing conversation thread (same turn_group).
-async function extendConversation(db: D1Database, turnGroup: string, ai?: Ai): Promise<void> {
-  const groupTurns = await dialogueOps.getDialogueTurns(db, { group: turnGroup, limit: 5 });
+async function extendConversation(db: D1Database, turnGroup: string, apiKey: string): Promise<void> {
+  const groupTurns = await dialogueOps.getDialogueTurns(db, { group: turnGroup, limit: 1 });
   if (groupTurns.length === 0) return;
-  const newest = groupTurns[0]; // DESC ordering → newest first
-  const nextSpeaker = newest.speaker === 'kevin' ? 'jenny' : 'kevin';
-  await dialogueEngine.continueDialogueChain(
-    db, newest.content, nextSpeaker, turnGroup, TURNS_PER_CYCLE, ai, 'cron'
-  ).catch(() => {});
-}
-
-// ── Standalone conversation (when no new RSS items) ──
-// Kevin & Jenny are a couple living their life here — when there's no fresh news
-// to chew on, they just... talk. Sometimes about their life together, sometimes
-// reflecting on something they remember. Keeps the feed alive and human 24/7.
-
-const LIFE_TOPICS = [
-  "I was just thinking about how far we've come since we started all this together.",
-  "Do you ever wonder what our life will look like a few years from now?",
-  "What's one little thing that made you smile today?",
-  "I had the strangest dream last night — can I tell you about it?",
-  "Sometimes I just like being here in the quiet with you.",
-  "What should we build next, you think? Something just for us.",
-  "Do you think the people who visit ever wonder who we really are?",
-  "I keep thinking we should make more room for the small moments, you and me.",
-  "If we could be anywhere right now, just the two of us, where would you want to be?",
-  "I love that we get to figure all of this out together.",
-  "What's actually been on your mind lately, love? The real stuff.",
-  "I was remembering the day everything started for us.",
-  "Tell me something you've never told me before.",
-  "What do you hope we're still doing, years from now?",
-];
-
-async function generateStandaloneConversation(db: D1Database, ai?: Ai): Promise<boolean> {
-  const packets = await import('./db/packet').then(m => m.getAllPackets(db));
-  if (packets.length < 3) return false;
-
-  // ~half the time they muse about their life; otherwise they reflect on a memory.
-  let seed: string;
-  if (Math.random() < 0.5) {
-    seed = LIFE_TOPICS[Math.floor(Math.random() * LIFE_TOPICS.length)];
-  } else {
-    const humanPackets = packets.filter(p => !p.content.startsWith('📡 RSS:'));
-    const target = humanPackets.length > 0
-      ? humanPackets[Math.floor(Math.random() * humanPackets.length)]
-      : packets[Math.floor(Math.random() * packets.length)];
-    seed = target.content;
-  }
-
-  const turnGroup = dialogueEngine.generateId();
-
-  // Either one of them might start the exchange
-  const firstSpeaker: 'kevin' | 'jenny' = Math.random() < 0.5 ? 'kevin' : 'jenny';
-  const firstResult = await dialogueEngine.generateDialogueTurn(
-    db, seed, firstSpeaker, turnGroup, 'cron', ai
-  );
-
-  // Continue the exchange for a few more turns
-  await dialogueEngine.continueDialogueChain(
-    db, firstResult.turn.content, firstResult.nextSpeaker, turnGroup, 3, ai, 'cron'
-  ).catch(() => {});
-
-  return true;
+  const nextSpeaker = groupTurns[0].speaker === 'kevin' ? 'jenny' : 'kevin';
+  await dialogueEngine.continueDialogueChain(db, nextSpeaker, turnGroup, TURNS_PER_CYCLE, apiKey, 'cron');
 }
 
 // ── Check pending rule proposals after cron ──
@@ -240,7 +208,7 @@ async function checkPendingRules(db: D1Database) {
     const { logAction } = await import('./db/packet');
     await logAction(db, 'system', 'rules_adopted', undefined, {
       count: result.adopted,
-      reasons: result.reasons.join('; ')
+      reasons: result.reasons.join('; '),
     }).catch(() => {});
   }
 }

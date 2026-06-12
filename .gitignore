@@ -4,6 +4,7 @@ dist/
 *.log
 .env
 .env.local
+.dev.vars
 debug_*.json
 .claude/
 *.local.json

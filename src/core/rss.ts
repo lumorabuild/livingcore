@@ -176,7 +176,7 @@ export interface RssProcessingResult {
   turn_group: string | null;
 }
 
-export async function processRSSFeeds(db: D1Database): Promise<RssProcessingResult> {
+export async function processRSSFeeds(db: D1Database, apiKey?: string): Promise<RssProcessingResult> {
   const startTime = Date.now();
   let feedsFetched = 0;
   let itemsFetched = 0;
@@ -307,36 +307,27 @@ export async function processRSSFeeds(db: D1Database): Promise<RssProcessingResu
       });
     }
 
-    // Kevin speaks first about RSS — trigger is the packet content itself
+    // Open a real conversation about the news — one genuine turn here; the cron
+    // extends the thread over the following cycles. (No AI key / no reply → no
+    // turns at all; the items are still saved as packets above.)
     turnGroup = packetOps.generateId();
+    const headlines = selectedItems.slice(0, 2)
+      .map(i => `"${i.title} — ${i.summary.slice(0, 200)}"`)
+      .join(' • ');
+    const seed = `[You two just read today's news. Items that caught your eye: ${headlines}]`;
 
     const firstTurn = await generateDialogueTurn(
-      db,
-      `📡 Today's RSS: ${selectedItems.map(i => i.title).join(' | ')}`,
-      'kevin',
-      turnGroup,
-      'rss'
+      db, seed, Math.random() < 0.5 ? 'kevin' : 'jenny', turnGroup, 'rss', apiKey
     );
-    discussionTurns++;
-
-    // Chain 2 more turns using dialogue engine
-    const secondTurn = await generateDialogueTurn(
-      db,
-      firstTurn.turn.content,
-      firstTurn.nextSpeaker,
-      turnGroup,
-      'rss'
-    );
-    discussionTurns++;
-
-    const thirdTurn = await generateDialogueTurn(
-      db,
-      secondTurn.turn.content,
-      secondTurn.nextSpeaker,
-      turnGroup,
-      'rss'
-    );
-    discussionTurns++;
+    if (firstTurn) {
+      discussionTurns++;
+      const secondTurn = await generateDialogueTurn(
+        db, '', firstTurn.nextSpeaker, turnGroup, 'rss', apiKey
+      );
+      if (secondTurn) discussionTurns++;
+    } else {
+      turnGroup = null;
+    }
   }
 
   await packetOps.logAction(db, 'system', 'rss_complete', undefined, {

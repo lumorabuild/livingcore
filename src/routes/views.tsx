@@ -8,7 +8,7 @@ import { MemoryPage, fetchMemoryPageData } from '../views/pages/MemoryPage';
 type Bindings = {
   DB: D1Database;
   ASSETS: Fetcher;
-  AI: Ai;
+  NVIDIA_API_KEY: string;
 };
 
 export function createViewRoutes(app: Hono<{ Bindings: Bindings }>) {

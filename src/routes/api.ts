@@ -10,7 +10,7 @@ import * as rssEngine from '../core/rss';
 import { processInput } from '../core/loop';
 import { getAllCategories } from '../core/categories';
 
-type Bindings = { DB: D1Database; AI: Ai };
+type Bindings = { DB: D1Database; NVIDIA_API_KEY: string };
 
 const api = new Hono<{ Bindings: Bindings }>();
 
@@ -121,25 +121,27 @@ api.post('/inbox', async (c) => {
 
     await dialogueOps.updateInboxStatus(c.env.DB, item.id, 'processing', turnGroup);
 
-    // Generate first turn synchronously so the frontend gets immediate response
+    // Generate first turn synchronously so the frontend gets immediate response.
+    // The note reaches the agents as a mechanism marker — what they say about it is theirs.
+    const seed = `[A visitor named "${(item.author || 'anonymous').slice(0, 60)}" left you two a note: "${item.content.slice(0, 600)}"]`;
     const firstTurn = await dialogueEngine.generateDialogueTurn(
-      c.env.DB, item.content, firstSpeaker, turnGroup, 'inbox', c.env.AI
+      c.env.DB, seed, firstSpeaker, turnGroup, 'inbox', c.env.NVIDIA_API_KEY
     );
+
+    if (!firstTurn) {
+      // Brain unavailable right now — leave the note pending; cron picks it up shortly.
+      await dialogueOps.updateInboxStatus(c.env.DB, item.id, 'pending');
+      return c.json({
+        success: true,
+        data: { inbox_item: item, first_turn: null, turn_group: null, next_speaker: null, queued: true }
+      });
+    }
 
     // Chain continues in background (registered with waitUntil)
     runInBackground(c, async () => {
       await dialogueEngine.continueDialogueChain(
-        c.env.DB, firstTurn.turn.content, firstTurn.nextSpeaker, turnGroup, 3, c.env.AI
+        c.env.DB, firstTurn.nextSpeaker, turnGroup, 3, c.env.NVIDIA_API_KEY, 'inbox'
       );
-      // Also evaluate pending proposals in the same background task
-      try {
-        const { checkPendingProposals } = await import('../core/thinking_rules');
-        const state = await packetOps.getSystemState(c.env.DB);
-        const coherence = parseFloat(state.avg_coherence || '0.4');
-        await checkPendingProposals(c.env.DB, coherence);
-      } catch (err) {
-        // Silently handle — rule evaluation is non-critical
-      }
     });
 
     return c.json({
@@ -300,13 +302,17 @@ api.post('/think', async (c) => {
   const content = body.content || 'Continue our conversation...';
 
   const result = await dialogueEngine.generateDialogueTurn(
-    c.env.DB, content, speaker, undefined, 'manual', c.env.AI
+    c.env.DB, content, speaker, undefined, 'manual', c.env.NVIDIA_API_KEY
   );
+
+  if (!result) {
+    return c.json({ success: false, error: 'AI unavailable — no turn generated (no template fallback exists)' }, 503);
+  }
 
   // Chain continues in background
   runInBackground(c, async () => {
     await dialogueEngine.continueDialogueChain(
-      c.env.DB, result.turn.content, result.nextSpeaker, result.turnGroup, 2, c.env.AI
+      c.env.DB, result.nextSpeaker, result.turnGroup, 2, c.env.NVIDIA_API_KEY, 'manual'
     );
   });
 
