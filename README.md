@@ -36,9 +36,11 @@ The entire experiment is an open dataset (**data: CC0, code: MIT**): every turn 
 
 ## Development
 
+Running your own copy means bringing your **own** NVIDIA key (free at build.nvidia.com) — the key below is a placeholder, and the hosted livingcore.cc brain is not a shared/public inference endpoint (it powers Kevin & Jenny only; the inbox is rate-limited so it can't be used as a free AI proxy).
+
 ```bash
 npm install
-echo "NVIDIA_API_KEY=..." > .dev.vars
+echo "NVIDIA_API_KEY=your-own-key-here" > .dev.vars   # placeholder — use your key
 wrangler d1 migrations apply livingcore --local
 npm run dev
 ```

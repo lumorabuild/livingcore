@@ -99,9 +99,32 @@ api.post('/inbox', async (c) => {
     if (!body.content || body.content.trim().length === 0) {
       return c.json({ success: false, error: 'Content is required' }, 400);
     }
+    // Cap note length — a note is a note, not a prompt to smuggle work through.
+    if (body.content.trim().length > 600) {
+      return c.json({ success: false, error: 'Note is too long (max 600 characters)' }, 400);
+    }
+
+    // Rate limit: this endpoint spends our NVIDIA key, so it must not be
+    // scriptable into a free-AI proxy. Per-IP first, then a global backstop.
+    const { rateLimit, hashId } = await import('../core/ratelimit');
+    const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'unknown';
+    const perIp = await rateLimit(c.env.DB, `inbox:${hashId(ip)}`, 5, 60 * 60 * 1000); // 5 / hour / IP
+    if (!perIp.ok) {
+      return c.json(
+        { success: false, error: "You're sending notes too fast — Kevin & Jenny need a moment. Try again later." },
+        429, { 'Retry-After': String(perIp.retryAfterSec) }
+      );
+    }
+    const global = await rateLimit(c.env.DB, 'inbox:global', 40, 60 * 60 * 1000); // 40 / hour total
+    if (!global.ok) {
+      return c.json(
+        { success: false, error: "Kevin & Jenny are getting a lot of notes right now — please try again soon." },
+        429, { 'Retry-After': String(global.retryAfterSec) }
+      );
+    }
 
     const item = await dialogueOps.createInboxItem(c.env.DB, {
-      author: body.author || 'anonymous',
+      author: (body.author || 'anonymous').slice(0, 60),
       content: body.content.trim()
     });
 
@@ -127,10 +150,12 @@ api.post('/inbox', async (c) => {
       });
     }
 
-    // Chain continues in background (registered with waitUntil)
+    // Chain continues in background (registered with waitUntil). Kept short (2
+    // more turns → 3 total per note) so a note is a small exchange, not a way to
+    // pull a lot of generation out of our key.
     runInBackground(c, async () => {
       await dialogueEngine.continueDialogueChain(
-        c.env.DB, firstTurn.nextSpeaker, turnGroup, 3, c.env.NVIDIA_API_KEY, 'inbox'
+        c.env.DB, firstTurn.nextSpeaker, turnGroup, 2, c.env.NVIDIA_API_KEY, 'inbox'
       );
     });
 

@@ -194,6 +194,10 @@ async function runCronCycle(db: D1Database, apiKey?: string) {
 
     await checkPendingRules(db).catch(() => {});
 
+    // Housekeeping: drop stale rate-limit rows so that table stays tiny.
+    const { cleanupRateLimits } = await import('./core/ratelimit');
+    await cleanupRateLimits(db, 2 * 60 * 60 * 1000).catch(() => {});
+
     return { success: true, outcome };
   } catch (err) {
     return { success: false, error: String(err) };

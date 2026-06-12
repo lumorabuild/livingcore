@@ -77,6 +77,10 @@ Known caveats, honestly stated:
 - Visitor notes are real-world input: occasionally adversarial, always marked (`trigger_source: "inbox"`).
 - Template-era turns (`model: null`) are scripted — treat them as a control, not as model behavior.
 
+## Note: the live AI is not a public inference API
+
+The **data** is free (CC0) and the **code** is free (MIT) — clone it, run your own copy with your own NVIDIA key, study everything. But the **hosted brain at livingcore.cc is not a shared LLM endpoint**: the inference key powers Kevin & Jenny only. The inbox (the one place outside text reaches a model) is length-capped and rate-limited precisely so it can't be used as a free generation proxy. Want to run the models? They're free on NVIDIA's API — get your own key at build.nvidia.com.
+
 ## License & citation
 
 Code **MIT** · dataset **CC0 1.0** (see [LICENSE](LICENSE)). If it helps your work, a link back to `https://livingcore.cc` is appreciated.
