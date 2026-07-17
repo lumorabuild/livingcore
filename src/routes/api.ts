@@ -301,10 +301,12 @@ api.get('/export/dialogue.jsonl', async (c) => {
 
 api.get('/export/minds.json', async (c) => {
   const mind = await import('../core/mind');
-  const [journalKevin, journalJenny, memories] = await Promise.all([
+  const [journalKevin, journalJenny, memories, histKevin, histJenny] = await Promise.all([
     mind.getJournal(c.env.DB, 'kevin'),
     mind.getJournal(c.env.DB, 'jenny'),
     mind.listMemories(c.env.DB, 1000),
+    mind.getJournalHistory(c.env.DB, 'kevin', 50),
+    mind.getJournalHistory(c.env.DB, 'jenny', 50),
   ]);
   const reflections = await c.env.DB.prepare(
     "SELECT agent, detail, created_at FROM agent_log WHERE action = 'reflect' ORDER BY id DESC LIMIT 200"
@@ -312,6 +314,8 @@ api.get('/export/minds.json', async (c) => {
 
   return c.json({
     journals: { kevin: journalKevin, jenny: journalJenny },
+    // The edit history of each journal — the direct, readable record of them growing.
+    journal_history: { kevin: histKevin, jenny: histJenny },
     memories,
     reflection_log: reflections.results || [],
     exported_at: new Date().toISOString(),

@@ -9,7 +9,7 @@ import * as packetOps from '../db/packet';
 import * as dialogueOps from '../db/dialogue';
 import * as rulesDb from '../db/rules';
 import * as mind from './mind';
-import { speakAsAgent, trackUsage, modelChain } from './ai_dialogue';
+import { speakAsAgent, trackUsage, modelChain, noteAiError } from './ai_dialogue';
 import { loadThinkingRules, kevinProposesRuleChange, jennyProposesRuleChange, checkPendingProposals } from './thinking_rules';
 
 // Mechanism note used when a conversation starts with no external seed (no news,
@@ -184,6 +184,18 @@ export async function reflectOnGroup(db: D1Database, apiKey: string, group: stri
         journal_updated: res.journalUpdated,
         conversation: group,
       }).catch(() => {});
+    } else {
+      // Reflection produced no growth. Always log it (this silent no-op is what hid
+      // Jenny's broken growth for weeks), but only escalate to last_ai_error when it
+      // was an actual FAILURE — a model/parse error. "Nothing new worth keeping" is a
+      // legitimate outcome and shouldn't masquerade as an error.
+      await packetOps.logAction(db, agent, 'reflect_noop', undefined, {
+        conversation: group,
+        error: res.error || 'nothing new',
+      }).catch(() => {});
+      if (res.error) {
+        await noteAiError(db, `reflect(${agent}) failed: ${res.error}`).catch(() => {});
+      }
     }
   }
 }

@@ -267,7 +267,21 @@ export async function nvidiaChatChain(
      *  one model's goodTemp — a fallback should run at the temp IT likes. */
     tempOffset?: number;
   },
-  opts: { timeoutMs?: number } = {}
+  opts: {
+    timeoutMs?: number;
+    /**
+     * Usable-output gate for structured tasks. A model can return HTTP 200 with
+     * content that's useless for the caller — e.g. reflection needs JSON, and
+     * llama-3.1-8b (Jenny) often answers a long transcript with prose instead.
+     * Transport success alone then "succeeds" with garbage and the chain never
+     * falls through. When `accept` is given, a 200 whose text fails it is treated
+     * like a soft failure: try the next model. This is why Jenny can still reflect —
+     * her own model leads, but a request that needs JSON falls through to one that
+     * emits it. Without `accept`, any 200 wins (the dialogue path, where all prose
+     * is valid).
+     */
+    accept?: (text: string) => boolean;
+  } = {}
 ): Promise<NvidiaChatChainResult> {
   const models = chain.filter(Boolean);
   if (models.length === 0) {
@@ -275,6 +289,7 @@ export async function nvidiaChatChain(
   }
 
   let last: NvidiaChatResult | null = null;
+  let lastModel = models[0];
   const errors: string[] = [];
 
   for (let i = 0; i < models.length; i++) {
@@ -285,18 +300,21 @@ export async function nvidiaChatChain(
       { ...req, model: model.id, temperature },
       { timeoutMs: opts.timeoutMs, retries: 0 }
     );
-    if (res.ok) {
+    if (res.ok && (!opts.accept || opts.accept(res.text))) {
       return { ...res, model, usedFallback: i > 0 };
     }
+    // Keep a usable-transport result as the last resort even if it failed `accept`,
+    // so the caller still gets real text (and tokens) to fall back on.
     last = res;
-    errors.push(`${model.id}: ${res.error || 'unknown'}`);
+    lastModel = model;
+    errors.push(`${model.id}: ${res.ok ? 'rejected by accept()' : (res.error || 'unknown')}`);
   }
 
   return {
     ...(last as NvidiaChatResult),
     // Report the whole chain's failure, not just the last link's.
     error: errors.join(' | ').slice(0, 300),
-    model: models[0],
+    model: lastModel,
     usedFallback: false,
   };
 }

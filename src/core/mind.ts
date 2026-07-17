@@ -26,8 +26,20 @@ export interface AgentMemory {
 }
 
 const MAX_MEMORY_CHARS = 300;
-const MAX_MEMORIES_PER_AGENT = 400;
+// A runaway guard, not a working-set limit. Recall reads a bounded candidate slice
+// (see recallMemories), so pool size no longer costs anything per turn — and the
+// old 400 was never actually enforced (prune only ran after a *successful*
+// reflection, which for Jenny happened 6 times ever, so she reached 1,618). Raising
+// it to 2,000 keeps their real history instead of deleting ~1,200 of Jenny's
+// memories — including her oldest — the first time prune finally runs.
+const MAX_MEMORIES_PER_AGENT = 2000;
 const MAX_JOURNAL_CHARS = 2400;
+
+// Two memories this similar are the same thought. Kevin & Jenny re-saved "the
+// candle's new shape—pooled wax like a secret map" 40 times because saveMemory had
+// no dedup: duplicates then dominated recall, which made them say it again. That
+// feedback loop is what "no growth" looked like from the outside.
+const DUPLICATE_SIMILARITY = 0.75;
 
 function nowStamp(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -51,6 +63,19 @@ export async function ensureMindSchema(db: D1Database): Promise<void> {
      )`
   ).run();
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_agent_memories_agent ON agent_memories(agent)').run().catch(() => {});
+  // Every journal a version, never an overwrite. The journal IS the identity, so its
+  // edit history is the only direct record of them changing — without this, growth is
+  // invisible by construction: you can read who they are today but never who they were.
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS journal_versions (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       agent TEXT NOT NULL CHECK(agent IN ('kevin', 'jenny')),
+       content TEXT NOT NULL,
+       source_turn_group TEXT,
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`
+  ).run().catch(() => {});
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_journal_versions_agent ON journal_versions(agent, id)').run().catch(() => {});
   schemaReady = true;
 }
 
@@ -89,12 +114,42 @@ export async function getJournal(db: D1Database, agent: 'kevin' | 'jenny'): Prom
   return row?.value || '';
 }
 
-export async function setJournal(db: D1Database, agent: 'kevin' | 'jenny', text: string): Promise<void> {
+export async function setJournal(
+  db: D1Database,
+  agent: 'kevin' | 'jenny',
+  text: string,
+  group?: string
+): Promise<boolean> {
   const value = (text || '').trim().slice(0, MAX_JOURNAL_CHARS);
+  if (value.length < 5) return false; // don't overwrite a real journal with an empty rewrite
+  // Skip a no-op rewrite: reflection often returns a journal barely different from the
+  // current one, and a version log full of near-identical entries hides real change.
+  const current = await getJournal(db, agent);
+  if (current && similarity(value, current) > 0.9) return false;
+
   await db.prepare(
     `INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
   ).bind(`journal_${agent}`, value, nowStamp()).run();
+
+  await ensureMindSchema(db);
+  await db.prepare(
+    `INSERT INTO journal_versions (agent, content, source_turn_group, created_at) VALUES (?, ?, ?, ?)`
+  ).bind(agent, value, group || null, nowStamp()).run().catch(() => {});
+  return true;
+}
+
+/** A journal's edit history, newest first — the visible record of an agent growing. */
+export async function getJournalHistory(
+  db: D1Database,
+  agent: 'kevin' | 'jenny',
+  limit: number = 20
+): Promise<{ id: number; content: string; created_at: string }[]> {
+  await ensureMindSchema(db);
+  const rows = await db.prepare(
+    'SELECT id, content, created_at FROM journal_versions WHERE agent = ? ORDER BY id DESC LIMIT ?'
+  ).bind(agent, Math.min(100, Math.max(1, limit))).all<{ id: number; content: string; created_at: string }>();
+  return rows.results || [];
 }
 
 // ── Memories ──
@@ -109,10 +164,31 @@ export async function saveMemory(
   if (trimmed.length < 5) return false;
   await ensureMindSchema(db);
   const importance = Math.max(0, Math.min(1, opts.importance ?? 0.5));
+
+  // Dedup against this agent's recent memories. Without this the same insight is
+  // saved every time it resurfaces (one line reached 40 copies), and duplicates then
+  // crowd out everything else in recall — the loop that made them repeat themselves.
+  // When we'd re-save, bump the existing memory's importance instead: a thought that
+  // keeps returning genuinely matters, so let it rise rather than duplicate.
+  const recent = await db.prepare(
+    'SELECT id, content, importance FROM agent_memories WHERE agent = ? ORDER BY id DESC LIMIT 150'
+  ).bind(agent).all<{ id: number; content: string; importance: number }>();
+  for (const m of recent.results || []) {
+    if (similarity(trimmed, m.content) >= DUPLICATE_SIMILARITY) {
+      const bumped = Math.min(1, m.importance + 0.05);
+      await db.prepare('UPDATE agent_memories SET importance = ?, last_recalled = ? WHERE id = ?')
+        .bind(bumped, nowStamp(), m.id).run().catch(() => {});
+      return false;
+    }
+  }
+
   await db.prepare(
     `INSERT INTO agent_memories (agent, content, kind, importance, source_turn_group, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).bind(agent, trimmed, opts.kind || 'memory', importance, opts.group || null, nowStamp()).run();
+  // Keep each agent bounded right when it grows, not only after a reflection that may
+  // never come (Jenny reflected 6 times ever, so her pool was never pruned).
+  await pruneMemories(db, agent).catch(() => {});
   return true;
 }
 
@@ -127,15 +203,23 @@ export async function recallMemories(
   limit: number = 5
 ): Promise<AgentMemory[]> {
   await ensureMindSchema(db);
+  // Candidate pool = the newest 250 UNION the 250 most important. The old code read
+  // only the newest 250, so ~60% of memories (1,270 of 2,120) could never resurface —
+  // an old, important insight was permanently unreachable the moment 250 newer rows
+  // existed. Pulling the top-importance rows too lets the past actually come back.
   const rows = await db.prepare(
-    'SELECT * FROM agent_memories ORDER BY id DESC LIMIT 250'
+    `SELECT * FROM agent_memories WHERE id IN (
+        SELECT id FROM (SELECT id FROM agent_memories ORDER BY id DESC LIMIT 250)
+        UNION
+        SELECT id FROM (SELECT id FROM agent_memories ORDER BY importance DESC, id DESC LIMIT 250)
+     )`
   ).all<AgentMemory>();
   const all = rows.results || [];
   if (all.length === 0) return [];
 
   let chosen: AgentMemory[];
   if (query && query.trim().length > 0) {
-    const newestId = all[0].id;
+    const newestId = Math.max(...all.map(m => m.id));
     chosen = all
       .map(m => ({
         m,
@@ -147,7 +231,8 @@ export async function recallMemories(
       .slice(0, limit)
       .map(x => x.m);
   } else {
-    const newest = all.slice(0, 3);
+    // `all` is a UNION now, no longer id-ordered — sort explicitly before slicing.
+    const newest = all.slice().sort((a, b) => b.id - a.id).slice(0, 3);
     const important = all.slice()
       .sort((a, b) => b.importance - a.importance)
       .slice(0, limit);
@@ -237,13 +322,17 @@ export async function reflectOnConversation(
 
     const user =
       `The conversation you two just finished:\n${transcript}\n\n` +
-      `Your private journal as it reads today:\n${journal || '(empty)'}\n\n` +
+      `Your private journal as it reads today:\n${journal || '(empty — you have never written it)'}\n\n` +
       `Respond with ONLY a JSON object, no other text:\n` +
       `{"memories": [{"content": "...", "importance": 0.0-1.0}], "journal": "..."}\n\n` +
-      `- "memories": up to 3 things from this conversation worth keeping permanently ` +
-      `(insights, discoveries about each other, decisions, intentions). Use [] if nothing deserves keeping.\n` +
-      `- "journal": your journal rewritten however you want it to read going forward, under 250 words. ` +
-      `Use "" to leave it unchanged.`;
+      `- "memories": up to 3 things from THIS conversation worth keeping permanently ` +
+      `(a new insight, something you learned about ${partner}, a decision, an intention). ` +
+      `Only things not already obvious from your journal. Use [] if truly nothing new.\n` +
+      `- "journal": rewrite your journal as it should read going forward — this is the only ` +
+      `record of who you are becoming. Keep what still rings true, let go of what no longer ` +
+      `fits, and fold in how this conversation changed you. Write it as yourself, under 250 words. ` +
+      `Return the FULL journal text, not a diff. (Only repeat it verbatim if this conversation ` +
+      `genuinely left you unchanged.)`;
 
     const res = await nvidiaChatChain(apiKey, models, {
       messages: [
@@ -252,17 +341,21 @@ export async function reflectOnConversation(
       ],
       maxTokens: 800,
       temperature: 0.4,
-    }, { timeoutMs: 20000 }); // keep the whole cron cycle comfortably under its 2-min interval
+    }, {
+      timeoutMs: 20000, // keep the whole cron cycle comfortably under its 2-min interval
+      // Reflection needs parseable JSON. Jenny's own model (llama-3.1-8b) often answers
+      // a long transcript with prose, which used to make her reflection a silent no-op
+      // forever. `accept` makes the chain fall through to a model that returns JSON
+      // (mistral-small-4) — her voice leads, but she always gets to grow.
+      accept: (text) => parseReflectionJson(text) !== null,
+    });
 
-    if (!res.ok) return { memoriesSaved: 0, journalUpdated: false, tokens: 0, error: res.error };
+    if (!res.ok) return { memoriesSaved: 0, journalUpdated: false, tokens: res.totalTokens, error: res.error };
 
-    // Defensive parse: take the outermost {...} block.
-    const start = res.text.indexOf('{');
-    const end = res.text.lastIndexOf('}');
-    if (start < 0 || end <= start) {
+    const parsed = parseReflectionJson(res.text);
+    if (!parsed) {
       return { memoriesSaved: 0, journalUpdated: false, tokens: res.totalTokens, error: 'no JSON in reflection' };
     }
-    const parsed: any = JSON.parse(res.text.slice(start, end + 1));
 
     let saved = 0;
     const memories = Array.isArray(parsed.memories) ? parsed.memories.slice(0, 3) : [];
@@ -275,15 +368,47 @@ export async function reflectOnConversation(
       if (ok) saved++;
     }
 
-    let journalUpdated = false;
-    if (typeof parsed.journal === 'string' && parsed.journal.trim().length > 0) {
-      await setJournal(db, agent, parsed.journal);
-      journalUpdated = true;
-    }
+    // setJournal versions the entry and skips a near-identical rewrite, so
+    // journalUpdated now means the journal ACTUALLY changed — not just that the model
+    // echoed something back.
+    const journalUpdated =
+      typeof parsed.journal === 'string'
+        ? await setJournal(db, agent, parsed.journal, group)
+        : false;
 
-    await pruneMemories(db, agent);
+    // saveMemory already prunes per-agent; no separate prune needed here.
     return { memoriesSaved: saved, journalUpdated, tokens: res.totalTokens };
   } catch (err) {
     return { memoriesSaved: 0, journalUpdated: false, tokens: 0, error: String(err).slice(0, 150) };
+  }
+}
+
+/**
+ * Pull the reflection JSON out of a model reply. Models wrap it in prose or ```json
+ * fences often enough that the old bare indexOf('{')…lastIndexOf('}') silently failed
+ * and dropped the whole reflection — a real cause of the journals never updating.
+ */
+function parseReflectionJson(text: string): { memories?: any[]; journal?: string } | null {
+  if (!text) return null;
+  // Strip a ```json ... ``` (or plain ```) fence if present.
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+  const body = fenced ? fenced[1] : text;
+  const start = body.indexOf('{');
+  const end = body.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  const slice = body.slice(start, end + 1);
+  try {
+    return JSON.parse(slice);
+  } catch {
+    // Second chance: llama-3.1-8b (Jenny) emits RAW newlines/tabs inside string
+    // values, which is invalid JSON and makes strict parse throw. That single
+    // failure mode is why Jenny reflected 6 times ever while Kevin (whose model
+    // escapes them) reflected 400. Collapse bare control chars to spaces and retry;
+    // journals are prose, so a newline-to-space substitution costs nothing.
+    try {
+      return JSON.parse(slice.replace(/[\u0000-\u001F]+/g, ' '));
+    } catch {
+      return null;
+    }
   }
 }
