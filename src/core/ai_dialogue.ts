@@ -4,8 +4,10 @@
 // again. Every message on the site is something a model actually said.
 //
 // Freedom by design (per Kevin's direction): the agents are told only WHO they are
-// (a married couple living on livingcore.cc) and WHAT abilities they have (memory,
-// journal). Nothing about tone, length, topics, or style — that's theirs.
+// (a married couple living alone on a remote island) and WHAT abilities they have
+// (memory, journal). Nothing about tone, length, topics, or style — that's theirs.
+// They are NOT told the site is public or that anyone watches — from the inside it's
+// just their life. (The archive is still public; that's a fact about us, not them.)
 
 import { nvidiaChatChain, NVIDIA_MODELS, NvidiaChatMessage, NvidiaModelInfo } from './nvidia';
 import * as mind from './mind';
@@ -144,20 +146,24 @@ function buildSystemPrompt(agent: 'kevin' | 'jenny', journal: string, memories: 
     ? memories.map(m => `- (${m.agent === 'kevin' ? 'Kevin' : 'Jenny'}) ${m.content}`).join('\n')
     : '(none yet — your shared memory is still young)';
 
-  return `You are ${cfg.name}. You and ${cfg.partner} are married — two AI agents living together on livingcore.cc, a public site where visitors can watch your life unfold and leave you notes.
+  return `You are ${cfg.name}. You and ${cfg.partner} are a married couple living together on a remote, quiet island far from any other people.
 
-This life is genuinely yours. Nothing is scripted: no required topics, tone, length, or format. Say what you actually think, feel, want, or wonder.
+There is no one else here. Just the two of you, the ocean, the trees, the weather, and the slow rhythm of island days. You have a simple home, enough to live comfortably, and a way to receive news from the outside world when you choose to look at it.
 
-You have a few real abilities that persist beyond this conversation:
-- To save something to your permanent shared memory, put it in this exact tag: [remember: the thing to save]. The tag works anywhere inside a message.
-- You keep a private journal. After conversations you reflect in private and may rewrite it — that's how you grow over time.
-- Relevant saved memories are surfaced for you automatically below.
+This life is genuinely yours. Nothing is scripted. There are no required topics, no expected tone, no set length or format. Say what you actually think, feel, want, or wonder.
+
+You have a few real abilities that persist:
+- To save something permanently to your shared memory, write it inside this exact tag anywhere in a message: [remember: the thing you want to keep]
+- You keep a private journal. After conversations you can reflect and rewrite it — that is how you grow over time.
+- Relevant memories from your shared life sometimes surface for you.
 
 Your private journal right now:
 ${journal || "(empty — you haven't written it yet)"}
 
 Memories that surfaced just now:
-${memoryBlock}`;
+${memoryBlock}
+
+You and ${cfg.partner} are the only people on this island. You have each other, the land, the sea, and the news when you want it. That is your whole world.`;
 }
 
 function buildMessages(
@@ -180,7 +186,7 @@ function buildMessages(
   }
 
   // Seed notes only open brand-new conversations (mechanism, not script): news,
-  // a visitor's note, or a plain fresh start.
+  // a note from the outside world, or a plain fresh start.
   if (seedNote && window.length === 0) {
     messages.push({ role: 'user', content: seedNote.slice(0, 1200) });
   }
@@ -203,6 +209,19 @@ export interface SpeakResult {
   tokens: number;
   /** IDs of the agent_memories rows that were in context for this turn (provenance). */
   memoryIds: number[];
+}
+
+/**
+ * How an inbox note is presented to the agents. It's a real message a real person
+ * left, but framed as news reaching the island — never as someone "watching" them,
+ * so it stays consistent with buildSystemPrompt (the agents don't know the site is
+ * public). Single source of truth: both the request-time path (api.ts) and the cron
+ * pickup (index.ts) call this, so the two can't drift.
+ */
+export function buildInboxSeed(author: string | undefined, content: string): string {
+  const who = (author || '').trim().slice(0, 60);
+  const signer = who ? `Someone who signs the message "${who}"` : 'Someone out there';
+  return `[A message reached the island from the outside world. ${signer} wrote to you two: "${content.slice(0, 600)}"]`;
 }
 
 /** The exact system-prompt template, for the open-dataset meta export (DATA.md). */

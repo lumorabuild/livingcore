@@ -8,7 +8,7 @@ import { createViewRoutes } from './routes/views';
 import * as dialogueEngine from './core/dialogue';
 import * as rssEngine from './core/rss';
 import * as dialogueOps from './db/dialogue';
-import { noteAiError, AGENTS } from './core/ai_dialogue';
+import { noteAiError, AGENTS, buildInboxSeed } from './core/ai_dialogue';
 import { buildRobotsTxt, buildSitemapXml, FAVICON_SVG } from './core/seo';
 
 type Bindings = {
@@ -181,7 +181,7 @@ async function runCronCycle(db: D1Database, apiKey?: string) {
       const item = pending[0];
       const group = dialogueEngine.generateId();
       await dialogueOps.updateInboxStatus(db, item.id, 'processing', group);
-      const seed = `[A visitor named "${(item.author || 'anonymous').slice(0, 60)}" left you two a note: "${item.content.slice(0, 600)}"]`;
+      const seed = buildInboxSeed(item.author, item.content);
       const first = await dialogueEngine.generateDialogueTurn(db, seed, randomSpeaker(), group, 'inbox', apiKey);
       if (first) {
         await dialogueEngine.continueDialogueChain(db, first.nextSpeaker, group, TURNS_PER_CYCLE, apiKey, 'inbox');

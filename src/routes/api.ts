@@ -136,7 +136,8 @@ api.post('/inbox', async (c) => {
 
     // Generate first turn synchronously so the frontend gets immediate response.
     // The note reaches the agents as a mechanism marker — what they say about it is theirs.
-    const seed = `[A visitor named "${(item.author || 'anonymous').slice(0, 60)}" left you two a note: "${item.content.slice(0, 600)}"]`;
+    const { buildInboxSeed } = await import('../core/ai_dialogue');
+    const seed = buildInboxSeed(item.author, item.content);
     const firstTurn = await dialogueEngine.generateDialogueTurn(
       c.env.DB, seed, firstSpeaker, turnGroup, 'inbox', c.env.NVIDIA_API_KEY
     );
