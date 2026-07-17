@@ -324,7 +324,7 @@ api.get('/export/minds.json', async (c) => {
 
 api.get('/export/meta.json', async (c) => {
   const { AGENTS, getPromptTemplate } = await import('../core/ai_dialogue');
-  const { NVIDIA_MODELS, NVIDIA_BASE_URL, REGISTRY_VERIFIED_ON } = await import('../core/nvidia');
+  const { NVIDIA_MODELS, NVIDIA_BASE_URL, REGISTRY_VERIFIED_ON, FREE_TIER_RPM } = await import('../core/nvidia');
   const mind = await import('../core/mind');
   const [state, dialogueCount, memories] = await Promise.all([
     packetOps.getSystemState(c.env.DB),
@@ -363,7 +363,15 @@ api.get('/export/meta.json', async (c) => {
         system_prompt_template: getPromptTemplate('jenny'),
       },
     },
-    inference: { provider: NVIDIA_BASE_URL, registry: NVIDIA_MODELS, registry_verified_on: REGISTRY_VERIFIED_ON },
+    inference: {
+      provider: NVIDIA_BASE_URL,
+      // Every model runs on NVIDIA's free developer tier — no paid provider, no
+      // per-token billing, no card on the account. The only ceiling is rate.
+      tier: 'nvidia-free',
+      free_tier_rpm: FREE_TIER_RPM,
+      registry: NVIDIA_MODELS,
+      registry_verified_on: REGISTRY_VERIFIED_ON,
+    },
     architecture: [
       'cron every 2 min adds ~2 real turns to the live conversation (full history + journal + surfaced memories in context)',
       'agents can save permanent memories inline with [remember: ...] tags',

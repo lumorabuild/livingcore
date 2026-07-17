@@ -5,8 +5,35 @@
 //
 // The key lives ONLY in the Worker secret NVIDIA_API_KEY (wrangler secret put) and
 // .dev.vars locally — never in code or git.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// FREE-TIER INVARIANT (Kevin's rule, 2026-07-17): livingcore must ONLY ever call
+// NVIDIA's free developer tier — never a paid provider, never a paid endpoint.
+// This is safe BY CONSTRUCTION and must stay that way:
+//   • This module is the ONLY place that talks to any AI. The single fetch() below
+//     hits NVIDIA_BASE_URL and nothing else. There is no OpenAI/Anthropic/Google/
+//     Workers-AI code path anywhere in the repo — keep it that way.
+//   • Every model on build.nvidia.com is free on the developer tier. There is NO
+//     per-token or per-model billing on this endpoint and NO card on the account,
+//     so no call here can ever incur a charge. Over-use returns HTTP 429 (handled
+//     in nvidiaChat), never a bill.
+//   • The real ceiling is RATE, not money: FREE_TIER_RPM below. Stay under it.
+// Before adding a model to the registry: (1) probe it returns a real completion
+// (status:'ok'), and (2) confirm it's reachable on THIS endpoint with our key —
+// which, by the point above, guarantees it's free. Do NOT add a model that needs
+// any other endpoint, key, or account tier.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+
+// NVIDIA free developer tier: 40 requests/minute (upgradable to 200 on request).
+// Documented here as the hard operating budget. livingcore's peak is well under it:
+// the cron fires every 2 min and a worst-case tick (reflection for both agents +
+// a fresh turn, incl. fallback/accept retries) is ~8-10 calls clustered in ~20s,
+// i.e. ≈10 req in a rolling minute — 4x headroom. Anything that raises call volume
+// (faster cron, more agents, un-throttled visitor input) must be checked against
+// this number first.
+export const FREE_TIER_RPM = 40;
 
 /**
  * When the registry below was last checked against the live API with a real
