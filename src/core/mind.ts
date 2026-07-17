@@ -12,7 +12,7 @@
 //                  the transcript and decides what to keep. Deterministic growth:
 //                  it always runs, it doesn't depend on the model "choosing" a tool.
 
-import { nvidiaChat, NVIDIA_MODELS, NvidiaModelInfo } from './nvidia';
+import { nvidiaChatChain, NvidiaModelInfo } from './nvidia';
 
 export interface AgentMemory {
   id: number;
@@ -215,7 +215,9 @@ export async function reflectOnConversation(
   db: D1Database,
   apiKey: string,
   agent: 'kevin' | 'jenny',
-  model: NvidiaModelInfo,
+  /** The agent's model chain (primary first) — reflection is how they grow, so it
+   *  must survive a dead primary just like speaking does. */
+  models: NvidiaModelInfo[],
   turns: { speaker: string; content: string }[],
   group: string
 ): Promise<ReflectionResult> {
@@ -243,15 +245,14 @@ export async function reflectOnConversation(
       `- "journal": your journal rewritten however you want it to read going forward, under 250 words. ` +
       `Use "" to leave it unchanged.`;
 
-    const res = await nvidiaChat(apiKey, {
-      model: model.id,
+    const res = await nvidiaChatChain(apiKey, models, {
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
       ],
       maxTokens: 800,
       temperature: 0.4,
-    }, { timeoutMs: 30000 }); // keep the whole cron cycle comfortably under its 2-min interval
+    }, { timeoutMs: 20000 }); // keep the whole cron cycle comfortably under its 2-min interval
 
     if (!res.ok) return { memoriesSaved: 0, journalUpdated: false, tokens: 0, error: res.error };
 

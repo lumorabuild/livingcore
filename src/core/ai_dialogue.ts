@@ -7,7 +7,7 @@
 // (a married couple living on livingcore.cc) and WHAT abilities they have (memory,
 // journal). Nothing about tone, length, topics, or style — that's theirs.
 
-import { nvidiaChat, NVIDIA_MODELS, NvidiaChatMessage, NvidiaModelInfo } from './nvidia';
+import { nvidiaChatChain, NVIDIA_MODELS, NvidiaChatMessage, NvidiaModelInfo } from './nvidia';
 import * as mind from './mind';
 import { DialogueTurn } from '../db/dialogue';
 
@@ -15,13 +15,40 @@ export interface AgentConfig {
   name: 'Kevin' | 'Jenny';
   partner: 'Kevin' | 'Jenny';
   emoji: string;
+  /** The voice this agent is meant to have. */
   model: NvidiaModelInfo;
+  /** Tried in order only when `model` is unreachable — see AGENTS below. */
+  fallbacks: NvidiaModelInfo[];
 }
 
+// Their two different base models ARE their two different personalities, so each
+// agent keeps its own primary. But NVIDIA retires free NIM deployments without
+// warning (2026-07-15 took out both at once and the site went quiet for two days),
+// so each agent also names the *other's* model as its fallback: whichever endpoint
+// is still up, both of them can still speak. A fallback turn is still a real
+// completion — nothing scripted — and the turn records the model that truly spoke,
+// so the archive never misattributes a voice.
 export const AGENTS: Record<'kevin' | 'jenny', AgentConfig> = {
-  kevin: { name: 'Kevin', partner: 'Jenny', emoji: '🧠', model: NVIDIA_MODELS['llama-4-maverick'] },
-  jenny: { name: 'Jenny', partner: 'Kevin', emoji: '🧶', model: NVIDIA_MODELS['ministral-14b'] },
+  kevin: {
+    name: 'Kevin',
+    partner: 'Jenny',
+    emoji: '🧠',
+    model: NVIDIA_MODELS['mistral-small-4'],
+    fallbacks: [NVIDIA_MODELS['llama-3.1-8b']],
+  },
+  jenny: {
+    name: 'Jenny',
+    partner: 'Kevin',
+    emoji: '🧶',
+    model: NVIDIA_MODELS['llama-3.1-8b'],
+    fallbacks: [NVIDIA_MODELS['mistral-small-4']],
+  },
 };
+
+/** Primary first, then its fallbacks — what actually gets tried for a turn. */
+export function modelChain(agent: 'kevin' | 'jenny'): NvidiaModelInfo[] {
+  return [AGENTS[agent].model, ...AGENTS[agent].fallbacks];
+}
 
 // ── Runaway brakes (NOT a style constraint — just a safety ceiling far above
 // normal use, so a bug can never hammer the API all day) ──
@@ -95,10 +122,16 @@ export async function getAiDailyUsage(db: D1Database): Promise<{
 
 // Surface the most recent failure where it can be read from the DB (no log digging).
 export async function noteAiError(db: D1Database, msg: string): Promise<void> {
+  await noteState(db, 'last_ai_error', msg);
+}
+
+// A fallback turn is a SUCCESS, so it must not land in last_ai_error — otherwise a
+// long primary outage overwrites that key every turn and buries the real errors.
+async function noteState(db: D1Database, key: string, msg: string): Promise<void> {
   await db.prepare(
-    `INSERT INTO system_state (key, value, updated_at) VALUES ('last_ai_error', ?, ?)
+    `INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
-  ).bind(`${nowStamp()} ${msg}`.slice(0, 400), nowStamp()).run().catch(() => {});
+  ).bind(key, `${nowStamp()} ${msg}`.slice(0, 400), nowStamp()).run().catch(() => {});
 }
 
 // ── Prompt assembly ──
@@ -217,23 +250,31 @@ export async function speakAsAgent(
     return null;
   }
 
+  const chain = modelChain(agent);
   let totalTokens = 0;
   let text = '';
+  let spokenBy: NvidiaModelInfo = cfg.model;
+  let viaFallback = false;
+
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await nvidiaChat(apiKey, {
-      model: cfg.model.id,
+    const res = await nvidiaChatChain(apiKey, chain, {
       messages,
       maxTokens: MAX_COMPLETION_TOKENS,
       // Quality retry nudges temperature down — degenerate sampling is the usual culprit.
-      temperature: attempt === 0 ? cfg.model.goodTemp : Math.max(0.5, cfg.model.goodTemp - 0.2),
+      // An offset, not an absolute: each model in the chain applies it to its own goodTemp.
+      tempOffset: attempt === 0 ? 0 : -0.2,
     });
     totalTokens += res.totalTokens;
 
     if (!res.ok) {
-      await noteAiError(db, `${cfg.name}: ${res.error || 'unknown error'}`);
+      // Every model in the chain is down — stay quiet and let the next tick retry.
+      await noteAiError(db, `${cfg.name}: whole chain failed — ${res.error || 'unknown error'}`);
       if (totalTokens > 0) await recordUsage(db, totalTokens);
-      return null; // transport already retried inside nvidiaChat — don't double up
+      return null;
     }
+
+    spokenBy = res.model;
+    viaFallback = res.usedFallback;
 
     const candidate = stripSelfPrefix(res.text, agent);
     const degenerate = res.finishReason === 'repetition' || candidate.length < 2;
@@ -248,6 +289,11 @@ export async function speakAsAgent(
     await noteAiError(db, `${cfg.name}: degenerate/duplicate output, turn skipped`);
     return null;
   }
+  if (viaFallback) {
+    // Its own key, not last_ai_error: this turn succeeded. Lets a degraded voice be
+    // spotted from the DB while real errors stay visible in their own field.
+    await noteState(db, 'last_fallback', `${cfg.name}: primary ${cfg.model.id} unreachable — spoke via fallback ${spokenBy.id}`);
+  }
 
   // Their inline memory tool.
   const { cleaned, saved } = mind.extractRememberTags(text);
@@ -256,7 +302,10 @@ export async function speakAsAgent(
   }
   const finalText = cleaned.length >= 2 ? cleaned : text;
 
-  const thoughtLines = [`${cfg.emoji} ${cfg.name} · ${cfg.model.id} · ~${totalTokens} tok · ${opts.source}`];
+  // spokenBy, NOT cfg.model: /api/export/dialogue.jsonl reads the model id back out
+  // of this line, so a fallback turn must be attributed to the model that wrote it.
+  const thoughtLines = [`${cfg.emoji} ${cfg.name} · ${spokenBy.id} · ~${totalTokens} tok · ${opts.source}`];
+  if (viaFallback) thoughtLines.push(`⚠️ fallback: ${cfg.model.id} was unreachable`);
   for (const s of saved) thoughtLines.push(`💾 saved memory: ${s.slice(0, 80)}`);
 
   return {

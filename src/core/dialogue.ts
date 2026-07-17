@@ -9,7 +9,7 @@ import * as packetOps from '../db/packet';
 import * as dialogueOps from '../db/dialogue';
 import * as rulesDb from '../db/rules';
 import * as mind from './mind';
-import { speakAsAgent, trackUsage, AGENTS } from './ai_dialogue';
+import { speakAsAgent, trackUsage, modelChain } from './ai_dialogue';
 import { loadThinkingRules, kevinProposesRuleChange, jennyProposesRuleChange, checkPendingProposals } from './thinking_rules';
 
 // Mechanism note used when a conversation starts with no external seed (no news,
@@ -176,7 +176,7 @@ export async function reflectOnGroup(db: D1Database, apiKey: string, group: stri
   if (turns.length < 6) return; // too thin to be worth keeping
 
   for (const agent of ['kevin', 'jenny'] as const) {
-    const res = await mind.reflectOnConversation(db, apiKey, agent, AGENTS[agent].model, turns, group);
+    const res = await mind.reflectOnConversation(db, apiKey, agent, modelChain(agent), turns, group);
     if (res.tokens > 0) await trackUsage(db, res.tokens).catch(() => {});
     if (res.memoriesSaved > 0 || res.journalUpdated) {
       await packetOps.logAction(db, agent, 'reflect', undefined, {

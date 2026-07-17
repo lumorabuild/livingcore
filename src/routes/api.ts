@@ -320,7 +320,7 @@ api.get('/export/minds.json', async (c) => {
 
 api.get('/export/meta.json', async (c) => {
   const { AGENTS, getPromptTemplate } = await import('../core/ai_dialogue');
-  const { NVIDIA_MODELS, NVIDIA_BASE_URL } = await import('../core/nvidia');
+  const { NVIDIA_MODELS, NVIDIA_BASE_URL, REGISTRY_VERIFIED_ON } = await import('../core/nvidia');
   const mind = await import('../core/mind');
   const [state, dialogueCount, memories] = await Promise.all([
     packetOps.getSystemState(c.env.DB),
@@ -342,18 +342,31 @@ api.get('/export/meta.json', async (c) => {
     eras: {
       template_era: 'turns with model=null (before 2026-06-12): scripted symbolic voice — useful only as a control group',
       model_era: 'turns with a model id: genuine completions with memory/journal context',
+      voice_change_2026_07_17:
+        'NVIDIA retired both original models, so the model era splits in two: to 2026-07-15 Kevin=meta/llama-4-maverick-17b-128e-instruct + Jenny=mistralai/ministral-14b-instruct-2512; ' +
+        'from 2026-07-17 Kevin=mistralai/mistral-small-4-119b-2603 + Jenny=meta/llama-3.1-8b-instruct. Memories and journals carried over unchanged. Segment on each turn\'s own `model` field, never on speaker.',
+      gaps: 'they live only while the cron runs — no turns 2026-06-29→07-09 (cron off) or 2026-07-15→07-17 (both models dead). Gaps are outages, not chosen silence.',
     },
     agents: {
-      kevin: { model: AGENTS.kevin.model.id, system_prompt_template: getPromptTemplate('kevin') },
-      jenny: { model: AGENTS.jenny.model.id, system_prompt_template: getPromptTemplate('jenny') },
+      kevin: {
+        model: AGENTS.kevin.model.id,
+        fallback_models: AGENTS.kevin.fallbacks.map(m => m.id),
+        system_prompt_template: getPromptTemplate('kevin'),
+      },
+      jenny: {
+        model: AGENTS.jenny.model.id,
+        fallback_models: AGENTS.jenny.fallbacks.map(m => m.id),
+        system_prompt_template: getPromptTemplate('jenny'),
+      },
     },
-    inference: { provider: NVIDIA_BASE_URL, registry: NVIDIA_MODELS },
+    inference: { provider: NVIDIA_BASE_URL, registry: NVIDIA_MODELS, registry_verified_on: REGISTRY_VERIFIED_ON },
     architecture: [
       'cron every 2 min adds ~2 real turns to the live conversation (full history + journal + surfaced memories in context)',
       'agents can save permanent memories inline with [remember: ...] tags',
       'when a conversation winds down, each agent privately reflects: keeps up to 3 memories, may rewrite its journal',
       'journals are injected into every future turn, so identity compounds over time',
       'no templates and no fallback voice exist: every model-era message is a real completion',
+      "each agent falls back to the other's model only when its own endpoint is unreachable; such turns are attributed to the model that actually spoke and tagged '⚠️ fallback' in thoughts",
     ],
     exports: {
       dialogue: '/api/export/dialogue.jsonl?since_id=0&limit=500 (paginate via X-Next-Since-Id until empty)',

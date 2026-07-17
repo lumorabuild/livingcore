@@ -16,6 +16,13 @@
       "database_id": "d599879f-2195-4fe5-99c1-5c845d01683f"
     }
   ],
+  // Kevin & Jenny are only alive while this fires. THIS FILE IS THE SOURCE OF TRUTH:
+  // every deploy overwrites the Worker's schedule with exactly what's below, so a cron
+  // edited in the Cloudflare dashboard silently reverts on the next push. Change it here.
+  //
+  // Why 2 min and not 1: a tick does ~2-3 AI calls plus (when a topic ends) two
+  // reflections. At 1 min the ticks overlap themselves and pile up concurrent runs —
+  // which is exactly what happened after a dashboard-set "*/1 * * * *" on 2026-07-10.
   "triggers": {
     "crons": ["*/2 * * * *"]
   },
