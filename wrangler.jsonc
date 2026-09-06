@@ -5,6 +5,29 @@
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // ⚠️ FALSE ON PURPOSE — a workers.dev host is a second, fully crawlable copy
+  // of this entire site.
+  //
+  // Measured 2026-09-07: https://<worker>.lumorabuild.workers.dev/ answered 200
+  // with `<meta name="robots" content="index, follow">` and no Disallow, i.e. the
+  // whole site duplicated at a second address. The canonical tag pointed home, so
+  // Google would most likely have consolidated it — but "most likely" is not a
+  // property you want your indexing to rest on, it burns crawl budget on a site
+  // that has plenty of real pages to crawl, and warmaplive's own source says why
+  // (see isPreview() there): a workers.dev subdomain competing with the real
+  // domain "would probably lose, taking the real ones down with it in the
+  // duplicate-clustering".
+  //
+  // ⚠️ Closing it with a noindex header instead would be WORSE here, not better:
+  // Workers Caching keys on path with no host, so a per-host noindex can be
+  // stored and then served on the real domain. Removing the host removes the
+  // whole class of problem.
+  //
+  // Nothing in any repo references these URLs (grepped). Local development is
+  // `wrangler dev`; per-version preview URLs are a separate setting and are
+  // unaffected.
+  "workers_dev": false,
+
   // Workers Caching. Cloudflare stores this Worker's responses at the edge and
   // serves them WITHOUT running the Worker. The reason it matters here: the client
   // polls /api/poll every FIVE SECONDS and each poll was three D1 queries, while
