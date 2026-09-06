@@ -10,6 +10,7 @@ import * as rssEngine from './core/rss';
 import * as dialogueOps from './db/dialogue';
 import { noteAiError, AGENTS, buildInboxSeed } from './core/ai_dialogue';
 import { buildRobotsTxt, buildSitemapXml, FAVICON_SVG } from './core/seo';
+import { CACHE, cacheHeaders, seal } from './cache';
 
 type Bindings = {
   DB: D1Database;
@@ -23,8 +24,21 @@ type ScheduledController = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// Health check
+/*
+  ── DEFAULT-DENY CACHING ──
+  Registered FIRST, because Hono only wraps routes that were registered AFTER a
+  middleware. Every response that did not state a cache policy leaves here as
+  no-store instead of inheriting Cloudflare's two-hour heuristic for an
+  un-annotated 200. See src/cache.ts for why that default is the dangerous one.
+*/
+app.use('*', async (c, next) => {
+  await next();
+  c.res = seal(c.res);
+});
+
+// Health check. A liveness probe answers "right now" or it answers nothing useful.
 app.get('/health', (c) => {
+  for (const [k, v] of Object.entries(cacheHeaders(CACHE.NO_STORE))) c.header(k, v);
   return c.json({
     status: 'alive',
     name: 'Living Core',
@@ -42,7 +56,13 @@ app.get('/health', (c) => {
 // Manual cron trigger (HTTP) — for debugging. The repo is public, so this URL is
 // known: allow at most one HTTP-triggered cycle per minute so it can't be hammered
 // to drain the daily AI budget. (The real schedule calls runCronCycle directly.)
+/*
+  ⚠️ A GET THAT WRITES. It spends real AI budget and mutates D1, so it must never
+  be answered from cache — a stored 200 here would also hide the rate limiter
+  three lines down.
+*/
 app.get('/__cron', async (c) => {
+  for (const [k, v] of Object.entries(cacheHeaders(CACHE.NO_STORE))) c.header(k, v);
   const row = await c.env.DB.prepare("SELECT value FROM system_state WHERE key = 'last_manual_cron'")
     .first<{ value: string }>();
   const last = row ? Date.parse(row.value) || 0 : 0;
@@ -61,6 +81,9 @@ app.get('/__cron', async (c) => {
 
 // SSE endpoint for live polling — returns latest state + new turns
 app.get('/api/poll', async (c) => {
+  // The hot path: public/script.js asks for this every FIVE SECONDS, and each
+  // answer costs three D1 queries. See CACHE.POLL in src/cache.ts.
+  for (const [k, v] of Object.entries(cacheHeaders(CACHE.POLL))) c.header(k, v);
   const lastTurnId = parseInt(c.req.query('since') || '0');
 
   const [state, dialogueCount, newTurns] = await Promise.all([
@@ -84,7 +107,7 @@ app.get('/api/poll', async (c) => {
 app.get('/robots.txt', (c) =>
   c.text(buildRobotsTxt(), 200, {
     'Content-Type': 'text/plain; charset=utf-8',
-    'Cache-Control': 'public, max-age=86400',
+    ...cacheHeaders(CACHE.SEO),
   })
 );
 
@@ -93,7 +116,7 @@ app.get('/sitemap.xml', async (c) => {
     const xml = await buildSitemapXml(c.env.DB);
     return c.body(xml, 200, {
       'Content-Type': 'application/xml; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600',
+      ...cacheHeaders(CACHE.SEO),
     });
   } catch (err) {
     return c.text(`sitemap error: ${String(err)}`, 500);
@@ -103,14 +126,14 @@ app.get('/sitemap.xml', async (c) => {
 app.get('/favicon.svg', (c) =>
   c.body(FAVICON_SVG, 200, {
     'Content-Type': 'image/svg+xml',
-    'Cache-Control': 'public, max-age=604800',
+    ...cacheHeaders(CACHE.SEO),
   })
 );
 // Browsers/bots still probe /favicon.ico — serve the same SVG rather than 302→/.
 app.get('/favicon.ico', (c) =>
   c.body(FAVICON_SVG, 200, {
     'Content-Type': 'image/svg+xml',
-    'Cache-Control': 'public, max-age=604800',
+    ...cacheHeaders(CACHE.SEO),
   })
 );
 
@@ -130,8 +153,13 @@ app.get('/script.js', async (c) => {
   }
 });
 
-// 404 fallback — redirect to home
+// 404 fallback — redirect to home.
+//
+// ⚠️ Deliberately NOT cached. The Workers cache key is path + query, so storing
+// this would pin "/anything -> /" for every path a scanner invents, and a route
+// added later would be shadowed by the 302 that preceded it.
 app.all('*', (c) => {
+  for (const [k, v] of Object.entries(cacheHeaders(CACHE.NO_STORE))) c.header(k, v);
   return c.redirect('/');
 });
 

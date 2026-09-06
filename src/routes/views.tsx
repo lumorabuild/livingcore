@@ -4,6 +4,7 @@ import { HomePage, fetchHomePageData } from '../views/pages/HomePage';
 import { ConversationPage, fetchConversationPageData } from '../views/pages/ConversationPage';
 import { ArchivePage, fetchArchivePageData } from '../views/pages/ArchivePage';
 import { MemoryPage, fetchMemoryPageData } from '../views/pages/MemoryPage';
+import { CACHE, cacheHeaders } from '../cache';
 
 type Bindings = {
   DB: D1Database;
@@ -16,7 +17,9 @@ export function createViewRoutes(app: Hono<{ Bindings: Bindings }>) {
   app.get('/', async (c) => {
     try {
       const data = await fetchHomePageData(c.env.DB);
-      return c.html(<HomePage data={data} />);
+      // Rendered from the same state /api/poll returns, and it moves on the same
+      // two-minute cron — so it caches on the same terms.
+      return c.html(<HomePage data={data} />, 200, cacheHeaders(CACHE.LIVE_PAGE));
     } catch (err) {
       return c.html(`<html><body><h1>Error</h1><pre>${err}</pre></body></html>`, 500);
     }
@@ -28,7 +31,7 @@ export function createViewRoutes(app: Hono<{ Bindings: Bindings }>) {
       const slug = c.req.param('slug');
       const data = await fetchConversationPageData(c.env.DB, slug);
       if (!data) return c.redirect('/');
-      return c.html(<ConversationPage data={data} />);
+      return c.html(<ConversationPage data={data} />, 200, cacheHeaders(CACHE.ARCHIVE_PAGE));
     } catch (err) {
       return c.json({ error: 'Conversation route error', message: String(err), stack: (err as any).stack }, 500);
     }
@@ -38,7 +41,7 @@ export function createViewRoutes(app: Hono<{ Bindings: Bindings }>) {
   app.get('/archive', async (c) => {
     try {
       const data = await fetchArchivePageData(c.env.DB);
-      return c.html(<ArchivePage data={data} />);
+      return c.html(<ArchivePage data={data} />, 200, cacheHeaders(CACHE.ARCHIVE_PAGE));
     } catch (err) {
       return c.html(`<html><body><h1>Error</h1><pre>${err}</pre></body></html>`, 500);
     }
@@ -50,7 +53,7 @@ export function createViewRoutes(app: Hono<{ Bindings: Bindings }>) {
       const id = c.req.param('id');
       const data = await fetchMemoryPageData(c.env.DB, id);
       if (!data) return c.redirect('/');
-      return c.html(<MemoryPage data={data} />);
+      return c.html(<MemoryPage data={data} />, 200, cacheHeaders(CACHE.ARCHIVE_PAGE));
     } catch (err) {
       return c.json({ error: 'Memory route error', message: String(err), stack: (err as any).stack }, 500);
     }

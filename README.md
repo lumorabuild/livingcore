@@ -50,3 +50,49 @@ npm run dev
 ## Deployment
 
 Push to `main` — Cloudflare Workers Builds deploys automatically. For new migrations: `wrangler d1 migrations apply livingcore --remote`.
+
+## Caching (2026-09-06)
+
+Workers Caching was **off** here, so every request ran the Worker. The zone
+reported **1% cached across 54,351 requests in seven days**, and the shape of
+that traffic is the point: `public/script.js` polls `/api/poll` every **five
+seconds**, and each poll was three D1 queries — while the conversation itself
+only moves when the `*/2` cron fires.
+
+`cache.enabled` is now set in `wrangler.jsonc` and every policy lives in
+`src/cache.ts`:
+
+| route | browser | edge |
+|---|---|---|
+| `/api/poll` | `no-store` | `max-age=10, stale-while-revalidate=20` |
+| `/` | `no-store` | `max-age=60, stale-while-revalidate=120` |
+| `/archive`, `/conversation/:slug`, `/memory/:id` | `max-age=60` | `max-age=300, stale-while-revalidate=3600` |
+| robots / sitemap / favicon | `max-age=3600` | `max-age=86400, stale-while-revalidate=86400` |
+| `/health`, `/__cron`, the catch-all redirect | `no-store` | `no-store` |
+
+`?since=N` looks like a per-visitor key and is not: every open tab converges on
+the same last-seen turn id within one cycle, so in steady state they all share
+one entry.
+
+⚠️ `/__cron` is a **GET that writes** — it mutates D1 and spends AI budget. A
+cached 200 there would also have hidden its own rate limiter. It is explicitly
+`no-store`, and this is exactly the kind of route the guard below exists for.
+
+Two rules make it safe, and both are the opposite of the intuition:
+
+- **A response with no `Cache-Control` is not uncached — it is cached for two
+  hours.** With caching on, Cloudflare falls back to RFC 9111 heuristic freshness
+  for an un-annotated response: 7200s for a `200`, 1200s for a `301`, 180s for a
+  `404`. "Nobody thought about caching on this route" therefore means "cache it
+  for two hours", silently. The guard inverts that: anything that states no
+  policy leaves as `no-store`.
+- **The cache key does not contain the hostname or the scheme.** It is
+  entrypoint + path + query + Worker version. So a redirect whose `Location` is
+  built from the request's own host can never be stored — cached under a bare
+  path, it gets served back to the canonical host as a redirect to itself. That
+  is `ERR_TOO_MANY_REDIRECTS` on a site whose code is fine, and it took
+  www.warmaplive.com's home page down on 2026-08-20.
+
+The Worker **version** being part of the key is what makes the longer TTLs safe:
+a deploy starts from a cold cache, so a stored page can never outlive the build
+that produced it.

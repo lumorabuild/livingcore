@@ -4,6 +4,16 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
+
+  // Workers Caching. Cloudflare stores this Worker's responses at the edge and
+  // serves them WITHOUT running the Worker. The reason it matters here: the client
+  // polls /api/poll every FIVE SECONDS and each poll was three D1 queries, while
+  // the conversation itself only moves when the */2 cron fires.
+  //
+  // The cache key is entrypoint + path + query + Worker VERSION, so every deploy
+  // starts cold. It does NOT contain the hostname or the scheme. Per-route policy
+  // lives in src/cache.ts, and anything that does not state one is no-store.
+  "cache": { "enabled": true },
   "assets": {
     "directory": "public",
     "binding": "ASSETS",
