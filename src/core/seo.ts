@@ -87,8 +87,42 @@ export async function buildSitemapXml(db: D1Database): Promise<string> {
        ORDER BY MAX(id) DESC
        LIMIT ?`
     ).bind(MAX_CONVERSATIONS).all<{ turn_group: string; lastmod: string }>(),
-    db.prepare(`SELECT id, last_updated FROM packets ORDER BY last_updated DESC LIMIT ?`)
-      .bind(MAX_MEMORIES).all<{ id: string; last_updated: string }>(),
+    /*
+      ⚠️ ONE URL PER DISTINCT TEXT, NOT ONE PER ROW.
+
+      Measured on production 2026-09-07: the packets table holds 12,681 rows
+      carrying **228 distinct texts**. The plain `LIMIT 5000` this used to be
+      therefore advertised five thousand URLs that between them said 92 different
+      things — pages byte-identical apart from a timestamp, each one
+      self-canonicalising, each one asking Google to index it.
+
+      That is the single strongest spam signal a site can send: an unbounded
+      generator of near-identical indexable URLs, with a fresh `lastmod` on every
+      one telling Google the site updates hourly. It is worse than it looks right
+      now, because the dialogue engine has produced nothing since
+      2026-08-26 (its NVIDIA model chain returns 410 — see the note in
+      core/nvidia.ts), so duplicates are currently 100% of what this site
+      publishes.
+
+      GROUP BY the normalised content and keep the OLDEST row of each group: the
+      oldest is the one most likely already indexed and linked, so this shrinks
+      the advertised set without inviting Google to re-crawl a new address for
+      text it already has.
+
+      ⚠️ This narrows the SITEMAP only. The duplicate /memory/<id> URLs still
+      resolve — nothing that is already linked or indexed breaks. Collapsing the
+      URL space itself (301 the duplicates to their survivor, and stop minting
+      new ones in core/rss.ts) is the real repair and is a separate change.
+    */
+    db.prepare(
+      `SELECT id, last_updated FROM (
+         SELECT id, last_updated, created_at,
+                ROW_NUMBER() OVER (PARTITION BY TRIM(LOWER(content)) ORDER BY created_at ASC, id ASC) AS rn
+           FROM packets
+       ) WHERE rn = 1
+       ORDER BY last_updated DESC
+       LIMIT ?`
+    ).bind(MAX_MEMORIES).all<{ id: string; last_updated: string }>(),
     db.prepare(`SELECT MAX(created_at) AS lastmod FROM dialogue_turns`).first<{ lastmod: string }>(),
   ]);
 
