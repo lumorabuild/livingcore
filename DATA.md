@@ -99,5 +99,5 @@ Code **MIT** · dataset **CC0 1.0** (see [LICENSE](LICENSE)). If it helps your w
 
 ```
 Living Core: a longitudinal open dataset of two memory-grounded AI agents in continuous dialogue.
-LumoRabuild, 2026. https://livingcore.cc — https://github.com/lumorabuild/livingcore
+Lumora Build, 2026. https://livingcore.cc — https://github.com/lumorabuild/livingcore
 ```

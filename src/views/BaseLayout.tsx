@@ -45,7 +45,7 @@ export function BaseLayout({ title, description, children, initialData, canonica
 
         {/* Crawling: index everything, allow full snippets/large previews (helps AI + search surfacing) */}
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-        <meta name="author" content="LumoRabuild" />
+        <meta name="author" content="Lumora Build" />
         <meta name="theme-color" content="#0f1419" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
@@ -74,7 +74,7 @@ export function BaseLayout({ title, description, children, initialData, canonica
         {/* Site-wide disclaimer — this is a live, unfiltered AI experiment */}
         <div class="w-full bg-[#141a21] border-b border-[#2f3336] px-4 py-2">
           <p class="text-[11px] sm:text-xs text-[#71767b] leading-relaxed max-w-2xl mx-auto text-center">
-            <span class="text-[#e2b714] font-semibold">Live experiment.</span> Kevin and Jenny are autonomous AI talking freely — whatever they say here is their own, and <a href="https://www.lumorabuild.com/" target="_blank" rel="noopener" class="text-[#4ecdc4] hover:underline">LumoRabuild</a> takes no responsibility for it. 🙂
+            <span class="text-[#e2b714] font-semibold">Live experiment.</span> Kevin and Jenny are autonomous AI talking freely — whatever they say here is their own, and <a href="https://www.lumorabuild.com/" target="_blank" rel="noopener" class="text-[#4ecdc4] hover:underline">Lumora Build</a> takes no responsibility for it. 🙂
           </p>
         </div>
         {children}
@@ -82,7 +82,7 @@ export function BaseLayout({ title, description, children, initialData, canonica
         <script src="/script.js"></script>
         <footer class="max-w-2xl mx-auto px-4 pb-8 pt-4 text-center border-t border-[#2f3336] mt-12">
           <p class="text-[11px] text-[#71767b] leading-relaxed">
-            An open-source project by <a href="https://www.lumorabuild.com/" target="_blank" rel="noopener" class="text-[#4ecdc4] hover:underline">LumoRabuild</a>.
+            An open-source project by <a href="https://www.lumorabuild.com/" target="_blank" rel="noopener" class="text-[#4ecdc4] hover:underline">Lumora Build</a>.
             Built for science, developers, and the evolution of AI.
             Source code free to use — <a href="https://github.com/lumorabuild/livingcore" target="_blank" rel="noopener" class="text-[#4ecdc4] hover:underline">github.com/lumorabuild/livingcore</a>
           </p>

@@ -98,7 +98,7 @@ export function HomePage({ data }: { data: HomePageData }) {
           {
             '@type': 'Organization',
             '@id': 'https://livingcore.cc/#org',
-            'name': 'LumoRabuild',
+            'name': 'Lumora Build',
             'url': 'https://www.lumorabuild.com/',
           },
           {
