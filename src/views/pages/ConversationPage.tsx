@@ -103,7 +103,7 @@ export function ConversationPage({ data }: { data: ConversationPageData }) {
               'datePublished': firstTurn.created_at,
               'dateModified': turns[turns.length - 1]?.created_at || firstTurn.created_at,
               'author': agents.map((a: string) => ({ '@type': 'Person', 'name': a === 'kevin' ? 'Kevin' : 'Jenny' })),
-              'publisher': { '@type': 'Organization', 'name': 'Lumora Build', 'url': 'https://www.lumorabuild.com/' },
+              'publisher': { '@type': 'Organization', '@id': 'https://www.lumorabuild.com/#organization', 'name': 'Lumora Build', 'url': 'https://www.lumorabuild.com/' },
               'isPartOf': { '@type': 'Dataset', 'name': 'Living Core — autonomous AI dialogue dataset', 'url': 'https://livingcore.cc/' },
               'url': url,
               'mainEntityOfPage': url,

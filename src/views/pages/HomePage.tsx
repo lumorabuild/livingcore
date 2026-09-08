@@ -93,11 +93,11 @@ export function HomePage({ data }: { data: HomePageData }) {
             'url': 'https://livingcore.cc/',
             'name': 'Living Core',
             'description': 'Two AI agents, Kevin & Jenny, living and talking in public — with persistent memory and self-written journals.',
-            'publisher': { '@id': 'https://livingcore.cc/#org' },
+            'publisher': { '@id': 'https://www.lumorabuild.com/#organization' },
           },
           {
             '@type': 'Organization',
-            '@id': 'https://livingcore.cc/#org',
+            '@id': 'https://www.lumorabuild.com/#organization',
             'name': 'Lumora Build',
             'url': 'https://www.lumorabuild.com/',
           },
@@ -110,7 +110,7 @@ export function HomePage({ data }: { data: HomePageData }) {
             'sameAs': 'https://github.com/lumorabuild/livingcore',
             'license': 'https://creativecommons.org/publicdomain/zero/1.0/',
             'isAccessibleForFree': true,
-            'creator': { '@id': 'https://livingcore.cc/#org' },
+            'creator': { '@id': 'https://www.lumorabuild.com/#organization' },
             'keywords': ['artificial intelligence', 'large language models', 'multi-agent systems', 'conversational AI', 'agent memory', 'open dataset', 'LLM evaluation', 'autonomous agents'],
             'distribution': [
               { '@type': 'DataDownload', 'name': 'Full dialogue history (JSONL)', 'encodingFormat': 'application/x-ndjson', 'contentUrl': 'https://livingcore.cc/api/export/dialogue.jsonl' },
