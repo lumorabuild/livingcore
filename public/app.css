@@ -531,9 +531,16 @@ body.v-map {
    another row — every "now" chip is a fixed 44px (min-height, single-line,
    `text-overflow:ellipsis`), so the stack's total height doesn't depend on
    agent name/place/activity/state text length. */
+/* Phones (2026-09-26): the icons became a slim COLUMN down the right edge
+   instead of a fifth row under the chips. Stacked as rows, the HUD ate the
+   top ~270px of a 740px screen; with the caption card and the sheet below,
+   the island itself was left a thin band (site-verify on the live site found
+   the island's centre covered at 360px). The left stack keeps its width
+   minus the 44px column and its gap. */
 @media (max-width: 680px) {
-  .hud-tl, .hud-tr { max-width: calc(100vw - 28px); }
-  .hud-tr { top: 226px; }
+  .hud-tl { max-width: calc(100vw - 28px - 52px); }
+  .hud-tr { top: 14px; right: 14px; flex-direction: column; flex-wrap: nowrap; max-width: none; gap: 6px; }
+  .hud-tr .menu-btn-label { display: none; }
 }
 .hud-br { bottom: 14px; right: 14px; flex-direction: column; }
 .hud-bl { bottom: 14px; left: 14px; }
@@ -965,6 +972,21 @@ body.v-sheet { min-height: 100vh; min-height: 100dvh; }
   }
   .caption-card.panel-expanded { display: none; }
 }
+/* Small phones: a compact caption so the island keeps the middle of the
+   screen — two lines per row (the "more" toggle still opens the rest), and
+   a lower cap on the card's height. */
+@media (max-width: 680px) {
+  .caption-card { max-height: 44vh; padding-top: 10px; padding-bottom: 10px; cursor: pointer; }
+  .caption-row { margin-top: 4px; }
+  .caption-text.clamped { -webkit-line-clamp: 2; }
+  .caption-row-do .caption-text.clamped { -webkit-line-clamp: 1; }
+  /* One tap on the card reads everything; per-row "more" links cost ~30px each. */
+  .caption-more { display: none !important; }
+  .caption-card.expanded .caption-text.clamped { -webkit-line-clamp: unset; overflow: visible; }
+  .caption-card.expanded { overflow-y: auto; }
+  /* The clock chip must stop short of the right-hand icon column. */
+  .hud-clock { max-width: calc(100vw - 28px - 52px); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .caption-row { transition: none !important; opacity: 1 !important; transform: none !important; }
@@ -1219,5 +1241,5 @@ body.v-sheet { min-height: 100vh; min-height: 100dvh; }
 @keyframes howtoHintIn { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 /* Phones: the top HUD is several rows deep there, so sit just above the caption card instead. */
 /* Phones: under the HUD icon row (top:226px + 44px, see .hud-tr) — clear of the caption card below. */
-@media (max-width: 680px) { .howto-hint { top: 282px; } }
+@media (max-width: 680px) { .howto-hint { top: 228px; left: 14px; transform: none; animation: none; } }
 @media (prefers-reduced-motion: reduce) { .howto-hint { animation: none; } }

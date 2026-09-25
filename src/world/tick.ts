@@ -55,6 +55,8 @@ const TICK_WALL_BUDGET_MS = 85_000;
 const TICK_LOCK_TTL_MS = 115_000;
 /** Every model call must be finished by then (see setCallDeadline in core/nvidia.ts) — well inside the lock TTL. */
 const TICK_CALL_DEADLINE_MS = 100_000;
+/** A model-calling job never starts with less than this left before the call deadline (see the job loop). */
+const MIN_JOB_WINDOW_MS = 55_000;
 const DAILY_TOKEN_BUDGET = 12_000_000;
 const DAILY_CALL_BUDGET = 4000;
 const MAKE_QUOTA_PER_DAY = 6;
@@ -469,6 +471,22 @@ export async function runTick(env: IslandEnv): Promise<TickResult> {
 
       if (w.jobs.length > 0) {
         const job = w.jobs[0];
+        /*
+          A model-calling job needs real time: the scene-close narrator (5
+          models, 45 s each), the chapter (60 s), reflections, plans. Started
+          late in a tick — after two dialogue turns — it inherited a few seconds
+          of the shared call deadline, every link was "skipped (tick deadline)",
+          and the scene fell back to a no-op quiet stretch (seen live in
+          production, 2026-09-26). If a model job would start with less than
+          MIN_JOB_WINDOW_MS left, stop here: it runs FIRST next tick, with the
+          whole budget. new_day and a stored open_scene cost no model call and
+          are allowed any time.
+        */
+        const needsModel = job.kind !== 'new_day' && !(job.kind === 'open_scene' && w.next);
+        if (needsModel && tickStart + TICK_CALL_DEADLINE_MS - Date.now() < MIN_JOB_WINDOW_MS) {
+          outcome = 'deferred';
+          break;
+        }
         const result = await runJob(env, env.DB, w, job, gone, goneFound);
         calls += result.calls;
 

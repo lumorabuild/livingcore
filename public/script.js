@@ -546,6 +546,15 @@
     return row;
   }
 
+  // Phones: the caption shows two lines per row; one tap on the card opens the
+  // whole turn (the per-row "more" links are hidden there — each cost ~30px of
+  // a small screen). Delegated once, so re-rendered captions need no rewiring.
+  document.addEventListener('click', function (e) {
+    if (window.innerWidth > 680) return;
+    var card = e.target && e.target.closest ? e.target.closest('.caption-card') : null;
+    if (card) card.classList.toggle('expanded');
+  });
+
   /** Renders the caption card for turn `t` (poll shape: say/thought/do/
    *  activity/location, plus `sceneMode` from the caller) — the ONE place
    *  that decides what the card looks like, used both for a live turn
@@ -578,6 +587,7 @@
       // blanking the card for a turn with nothing to show.
       return null;
     }
+    captionCard.classList.remove('expanded'); // a new turn always starts compact on phones
     captionCard.setAttribute('data-speaker', t.speaker);
     captionCard.hidden = false;
     while (captionCard.firstChild) captionCard.removeChild(captionCard.firstChild);
