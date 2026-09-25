@@ -462,7 +462,6 @@ function SceneCard({ pub, turns }: { pub: PublicWorld; turns: SceneTurnRow[] }) 
       {nextSpeaker && (
         <p class="presence-line" id="presence-line"><span class="presence-dot"></span> Waiting for {BIOGRAPHIES[nextSpeaker].name}…</p>
       )}
-      <input type="hidden" id="latest-turn-id" value={String(latestId)} />
     </div>
   );
 }

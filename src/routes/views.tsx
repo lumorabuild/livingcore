@@ -17,6 +17,7 @@ import { MadePage, fetchMadePageData } from '../views/pages/MadePage';
 import { NotebookPage, fetchNotebookPageData } from '../views/pages/NotebookPage';
 import { LabPage, fetchLabPageData } from '../views/pages/LabPage';
 import { AboutPage } from '../views/pages/AboutPage';
+import { NotFoundPage } from '../views/pages/NotFoundPage';
 import { getArtifact } from '../world/store';
 import { CACHE, cacheHeaders } from '../cache';
 import { loadTint } from '../views/chrome';
@@ -36,6 +37,11 @@ function pageParam(c: any, name: string, fallback = 1): number {
 function errorPage(c: any, err: unknown) {
   console.error('view error', c.req.path, err);
   return c.html('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Something went wrong — Living Core</title></head><body style="font-family:system-ui;padding:2rem"><h1>Something went wrong</h1><p>The island is still there — try again in a moment. <a href="/">Back to the island</a></p></body></html>', 500, cacheHeaders(CACHE.NO_STORE));
+}
+
+/** The catch-all's answer: a real 404 page (see NotFoundPage for why not a redirect). */
+export function renderNotFound(c: any) {
+  return c.html(<NotFoundPage />, 404, cacheHeaders(CACHE.NO_STORE));
 }
 
 export function createViewRoutes(app: Hono<{ Bindings: Bindings }>) {

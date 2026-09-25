@@ -1288,8 +1288,9 @@
     if (!root) return;
     var scene = document.getElementById('live-scene');
     var presence = document.getElementById('presence-line');
-    var latestInput = document.getElementById('latest-turn-id');
-    var since = latestInput ? parseInt(latestInput.value || '0', 10) || 0 : 0;
+    // The last turn id rides on the root's data attribute (it used to be a
+    // hidden <input>, which accessibility checkers read as an unnamed control).
+    var since = parseInt(root.getAttribute('data-latest-turn-id') || '0', 10) || 0;
     var timer = null;
 
     function schedule(ms) {

@@ -12,7 +12,7 @@
 import { Hono } from 'hono';
 import api from './routes/api';
 import exportsApp from './routes/exports';
-import { createViewRoutes } from './routes/views';
+import { createViewRoutes, renderNotFound } from './routes/views';
 import { buildRobotsTxt, buildSitemapXml, FAVICON_SVG } from './core/seo';
 import { cleanupRateLimits } from './core/ratelimit';
 import { CACHE, cacheHeaders, seal } from './cache';
@@ -232,14 +232,15 @@ app.get('/app.css', async (c) => {
   }
 });
 
-// 404 fallback — redirect to home.
+// A real 404. Until 2026-09-25 this was a 302 to "/", which search engines
+// read as a soft 404 and which hid broken links (site-verify flagged it).
 //
-// ⚠️ Deliberately NOT cached. The Workers cache key is path + query, so storing
-// this would pin "/anything -> /" for every path a scanner invents, and a route
-// added later would be shadowed by the 302 that preceded it.
+// ⚠️ Deliberately NOT cached: the Workers cache key is path + query, so every
+// path a scanner invents would get its own stored entry, and a route added
+// later could be shadowed by a 404 stored before it existed.
 app.all('*', (c) => {
-  for (const [k, v] of Object.entries(cacheHeaders(CACHE.NO_STORE))) c.header(k, v);
-  return c.redirect('/');
+  if (c.req.method === 'GET' || c.req.method === 'HEAD') return renderNotFound(c);
+  return c.text('not found', 404, cacheHeaders(CACHE.NO_STORE));
 });
 
 // ── SCHEDULED EVENT HANDLER ──
