@@ -75,7 +75,7 @@ export const ERAS: Era[] = [
     from: null,
     to: null,
     summary:
-      'A body, a place, chores, weather, tides, skills, projects and real consequences — protocol island-1. ' +
+      'A body, a place, chores, weather, tides, skills, projects and real consequences — protocol island-1, then island-2 from 2026-09-26 (THOUGHT asked to be a sentence or two; island-1 thoughts averaged ~500 characters). Segment on each turn\'s `protocol` field. ' +
       "`from` is read at runtime from system_state['island_started_at'] (src/world/store.ts's loadWorld/initWorld), " +
       'written once, the first time the world is created.',
     models: 'src/world/models.ts: KEVIN_CHAIN / JENNY_CHAIN (dialogue) · NARRATOR_CHAIN (adjudication) · CHAPTER_CHAIN (the daily chapter)',

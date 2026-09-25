@@ -1,15 +1,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// LIVING CORE — client enhancement (island era, part 3 / SPEC3). Vanilla, no
-// framework. Progressive: every page renders fully server-side; this makes
-// the home page a real pan/zoom map app and every card a real dialog — poses,
-// walking, timed speech/thought/do bubbles, pan+zoom, the landmark/character/
-// weather/today/projects/info/menu cards, and the bottle form — plus keeps
-// "show all thoughts" and relative times in sync.
+// LIVING CORE — client enhancement (island era, part 4 / subtitles rewrite).
+// Vanilla, no framework. Progressive: every page renders fully server-side;
+// this makes the home page a real pan/zoom map app and every card a real
+// dialog — poses, walking, the caption card, pan+zoom, the landmark/
+// character/weather/today/projects/info/menu/how-to cards, and the bottle
+// form — plus keeps "show all thoughts" and relative times in sync.
 //
-// THE DIRECTOR (§ below "poll → queue → play"): each agent has its own
-// small queue and its own setTimeout chain, because in an apart scene the
-// two of them are doing completely different things at the same time and
-// must animate independently, not take turns waiting on each other.
+// THE CAPTION CARD (§ below "CAPTION CARD"): the owner, watching live —
+// "I didn't understand what exactly is happening in Kevin and Jenny's brain;
+// also everything is moving so fast... the text messages coming out of their
+// brain are not easy to read at all." This replaced the old floating map
+// bubbles (say/thought/do, one per turn, hanging over the figure) with ONE
+// card: the CURRENT turn, clearly labelled (💭 Thinks / 💬 Says / ✋ Does),
+// revealed slowly, held long enough to actually read, never more than one on
+// screen. A small round badge + a glow ring on the figure (island-map.tsx's
+// `.fig-active-ring`) mark who it's about; nothing else floats over the map.
+//
+// THE DIRECTOR (§ below "poll → queue → play"): ONE global queue across BOTH
+// agents now, not two independent per-agent ones — "at most one caption at a
+// time" (an apart scene used to animate both figures at once; now it plays
+// their turns in arrival order, one at a time, which is also just calmer).
 //
 // THE DIALOG SYSTEM (§ below "cards"): every floating card is a real
 // `<dialog>` with real SSR content. A no-JS click on its trigger just
@@ -26,7 +36,7 @@
 
   // ── thought "show all" toggle (the scene panel's blurred thought-peek
   // reveal) — remembered per-browser. Separate from the HUD's map "show
-  // thoughts" toggle below, which controls the map's thought-cloud bubbles
+  // thoughts" toggle below, which controls the caption card's 💭 Thinks row
   // and defaults ON ("it's the fun part") where this one defaults OFF. ──
   function initThoughtsToggle() {
     var btn = document.getElementById('thoughts-toggle-btn');
@@ -53,8 +63,9 @@
     }
   }
 
-  /** The HUD's map-only toggle — hides/shows the island's thought-cloud
-   *  bubbles (never the speech or DO-caption ones). Default ON. */
+  /** The HUD's map-only toggle — hides/shows the caption card's private
+   *  💭 Thinks row (never the say/do rows). Default ON. Read by
+   *  showCaption()/initCaptionFromSSR() below via `.island-root.thoughts-off`. */
   function initMapThoughtsToggle() {
     var btn = document.getElementById('map-thoughts-toggle');
     var root = document.querySelector('.island-root');
@@ -108,24 +119,6 @@
   function agentEmoji(speaker) { return speaker === 'kevin' ? '🔧' : '🌿'; }
   function agentName(speaker) { return speaker === 'kevin' ? 'Kevin' : 'Jenny'; }
 
-  // ── typewriter reveal for a freshly-added SAY line ──
-  function typewrite(el, text) {
-    if (REDUCED_MOTION || !text) { el.textContent = text; return; }
-    el.textContent = '';
-    var caret = document.createElement('span');
-    caret.className = 'typewriter-caret';
-    el.appendChild(caret);
-    var i = 0;
-    var step = Math.max(1, Math.floor(text.length / 90));
-    (function tick() {
-      i += step;
-      el.textContent = text.slice(0, i);
-      el.appendChild(caret);
-      if (i < text.length) requestAnimationFrame(function () { setTimeout(tick, 12); });
-      else caret.remove();
-    })();
-  }
-
   function appendTurn(container, t) {
     var div = document.createElement('div');
     div.className = 'turn ' + t.speaker + ' dialogue-turn';
@@ -148,8 +141,8 @@
     if (hasSay) {
       var say = document.createElement('p');
       say.className = 'turn-say';
+      say.textContent = t.say;
       div.appendChild(say);
-      typewrite(say, t.say);
     }
     if (hasDo) {
       var doEl = document.createElement('p');
@@ -245,6 +238,27 @@
     });
   }
 
+  /** The "how to watch" first-visit card — shown once (localStorage,
+   *  wrapped in try/catch so a visitor with storage blocked just sees it
+   *  every visit rather than crashing), and always reachable again from the
+   *  ℹ️ info card's own link. A real <dialog> like every other card, so
+   *  Esc/backdrop/focus handling is the same native behaviour every other
+   *  card here already gets for free — nothing bespoke needed. */
+  function initHowTo() {
+    var dlg = document.getElementById('howto-dialog');
+    if (!dlg) return;
+    var KEY = 'lc_seen_howto';
+    var seen = false;
+    try { seen = localStorage.getItem(KEY) === '1'; } catch (e) {}
+    function markSeen() { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+    if (!seen) {
+      // A short delay so it doesn't fight the rest of DOMContentLoaded's
+      // init work (figures/pan-zoom/caption) for the very first paint.
+      setTimeout(function () { openDialog('howto-dialog'); markSeen(); }, 500);
+    }
+    dlg.addEventListener('close', markSeen);
+  }
+
   // ── bottle form — lives inside #bottle-dialog; degrades to a plain
   // POST-by-fetch with no dialog markup required to work. ──
   function wireBottleForm(form) {
@@ -308,10 +322,11 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // THE ISLAND — figure poses, walking, bubbles, pan/zoom, landmark cards.
-  // Everything below reads small JSON islands the server printed
-  // (#__LOCATIONS__, #__WALKGRAPH__, #__LOCINFO__) and moves/poses the SAME
-  // server-rendered <g class="pin"> elements; nothing here re-renders any SVG.
+  // THE ISLAND — figure poses, walking, the caption card, pan/zoom, landmark
+  // cards. Everything below reads small JSON islands the server printed
+  // (#__LOCATIONS__, #__WALKGRAPH__, #__LOCINFO__, #__LATEST_TURN__) and
+  // moves/poses the SAME server-rendered <g class="pin"> elements; nothing
+  // here re-renders any SVG.
   // ─────────────────────────────────────────────────────────────────────────
   var LOCATIONS = {};
   var WALKGRAPH = { hub: { x: 520, y: 430 }, bends: {} };
@@ -336,12 +351,33 @@
     cooking: [-8, -12], eating: [8, -12],
   };
 
+  /** MIRRORS src/world/prompts.ts's energyWords/moodWords/nowWord —
+   *  same thresholds, same fallback order — so the HUD "now" chips can
+   *  update live from /api/poll's world.agents without a round trip through
+   *  the server. Keep in sync by hand if the server thresholds ever change. */
+  function energyWordsJS(e) {
+    if (e >= 80) return 'rested';
+    if (e >= 55) return 'a little tired';
+    if (e >= 30) return 'tired';
+    if (e >= 12) return 'exhausted';
+    return 'barely able to keep your eyes open';
+  }
+  function moodWordsJS(m) {
+    if (m >= 4) return 'happy';
+    if (m >= 2) return 'in good spirits';
+    if (m >= -1) return 'even';
+    if (m >= -3) return 'low';
+    return 'miserable';
+  }
+  function nowWordJS(a) { return a.energy < 55 ? energyWordsJS(a.energy) : moodWordsJS(a.mood); }
+
   var islandRoot = null;
   var islandViewport = null;
   var mapStage = null;
   var mapWrap = null;
   var svgEl = null;
-  var bubbleLayer = null;
+  var badgeLayer = null;
+  var captionCard = null;
 
   /**
    * The transform from the SVG's own viewBox (map units) to VIEWPORT pixels
@@ -349,7 +385,7 @@
    * Ratio + its OWN rendered box (`getBoundingClientRect`, which already
    * reflects PanZoom's CSS transform on `.map-stage`, however deep the
    * transform chain is — the browser resolves that for us). Includes
-   * `rect.left/top` on purpose: `.bubble-layer` is `position:fixed;inset:0`
+   * `rect.left/top` on purpose: `.badge-layer` is `position:fixed;inset:0`
    * (true viewport coordinates), unlike the old below-the-fold layout where
    * it shared an ancestor's origin with `.map-wrap`.
    */
@@ -391,9 +427,10 @@
   }
 
   /** Tweens `pin`'s position attribute (never a CSS transform — see
-   *  app.css's `.pin { transition: none }` comment) along `walkPath`, at a
-   *  steady ≈90 map-units/second clamped 2.5–9s, setting data-activity to
-   *  "walking" for the duration and calling `done(finalActivity, finalLoc)`
+   *  app.css's `.pin { transition: none }` comment) along `walkPath`. Calmer
+   *  motion pass (owner: "movement... so fast"): ~45 map-units/second,
+   *  clamped 4-12s — half the original SPEC3 speed. Sets data-activity to
+   *  "walking" for the duration and calls `done(finalActivity, finalLoc)`
    *  once it arrives so the caller can switch to the real pose. `onFrame`
    *  (optional) is called every frame with the figure's CURRENT map-unit
    *  {x,y} — Follow mode (below) uses it to keep panning while they walk. */
@@ -412,7 +449,7 @@
       done();
       return;
     }
-    var duration = Math.max(2500, Math.min(9000, (total / 90) * 1000));
+    var duration = Math.max(4000, Math.min(12000, (total / 45) * 1000));
     pin.setAttribute('data-activity', 'walking');
     var start = null;
     function frame(ts) {
@@ -432,179 +469,244 @@
     requestAnimationFrame(frame);
   }
 
-  function readingTimeMs(text) {
-    return Math.max(3000, Math.min(12000, 1200 + 55 * (text ? text.length : 0)));
+  // ─────────────────────────────────────────────────────────────────────────
+  // CAPTION CARD ("subtitles") — see this file's header comment. ONE card,
+  // the CURRENT turn only, never more than one on screen. readingTime =
+  // max(7s, 280ms × words across all three lines) + 3s (item A's own
+  // formula) is both how long the card holds AND, doubled down on below in
+  // the director, the pacing unit for the whole queue.
+  // ─────────────────────────────────────────────────────────────────────────
+  function wordCount(s) {
+    if (!s) return 0;
+    var m = s.trim().match(/\S+/g);
+    return m ? m.length : 0;
   }
 
-  /** A cheap head start for the SAY/THOUGHT-same-turn case (see addBubble's
-   *  collision pass below for what actually guarantees no overlap) — most
-   *  turns are 1-2 lines, so starting the thought bubble roughly one
-   *  bubble-height above the say bubble means the real measurement pass
-   *  usually has nothing left to correct. */
-  var THOUGHT_STACK_PX = 52;
-
-  /** "Above"-anchored bubbles (say/thought — never do-caption, which is
-   *  deliberately anchored below the figure's feet, see `above` below)
-   *  still on screen, as MEASURED viewport rects, so a new bubble can be
-   *  pushed clear of whatever it would otherwise land on. Entries are
-   *  dropped once their own element leaves the DOM (addBubble's own
-   *  removal timeout), never on a separate expiry clock of their own. */
-  var activeAboveRects = [];
-
-  function rectsOverlap(a, b) {
-    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  function captionHoldMs(say, thought, doText) {
+    var words = wordCount(say) + wordCount(thought) + wordCount(doText);
+    return Math.max(7000, 280 * words) + 3000;
   }
 
-  /** One HTML bubble, positioned in VIEWPORT pixels above/below `agentPos`
-   *  (current numeric {x,y} in map units — see currentPos below). Text is
-   *  always set via textContent, never innerHTML, even though it is already
-   *  known-safe JSON — model-written text has no business going through an
-   *  HTML parser at all. */
-  /** `liftPx` (extra CSS pixels, negative = higher) gives a same-turn
-   *  THOUGHT a head start above its SAY, and gives Kevin/Jenny sharing a
-   *  location a head start apart from each other — their map-unit `dx`
-   *  spread (±22 units, island-map.tsx) is only a few screen px at typical
-   *  scale, nowhere near a bubble's own width. Neither guess is trusted on
-   *  its own any more: BOTH cases are guesses about text that hasn't been
-   *  measured yet, and a guess is exactly what let SAY and THOUGHT land on
-   *  the literal same pixel (reproduced live at 375px width, two
-   *  `.map-bubble` elements sharing one `left`/`top`) — the collision pass
-   *  below, which runs once the bubble's REAL size is in the DOM, is what
-   *  actually guarantees no overlap, for any combination of turn lengths. */
-  /** Phones get a short version of a long line (cut at a word, with "…");
-   *  the live panel always has the whole turn. */
-  function isPhone() { return window.innerWidth <= 680; }
-
-  /** Phones show ONE turn at a time: seen live at 390px, both people's last
-   *  turns (say + thought + action each) stacked six bubbles over the island
-   *  and hid it completely. The live panel below always has everything. */
-  function clearBubbles() {
-    if (!bubbleLayer) return;
-    while (bubbleLayer.firstChild) bubbleLayer.removeChild(bubbleLayer.firstChild);
-    activeAboveRects = [];
-  }
-
-  /** What a phone shows for one turn: the spoken line, else the thought (if
-   *  thoughts are on), else the action — one bubble, never three. */
-  function phonePick(say, thought, doText) {
-    var thoughtsOn = !(islandRoot && islandRoot.classList.contains('thoughts-off'));
-    if (say) return { say: say, thought: '', doText: '' };
-    if (thought && thoughtsOn) return { say: '', thought: thought, doText: '' };
-    return { say: '', thought: '', doText: doText };
-  }
-
-  function clipForScreen(text, kind) {
-    if (window.innerWidth > 680) return text;
-    var max = kind === 'say' ? 120 : kind === 'thought' ? 100 : 72;
-    if (text.length <= max) return text;
-    var cut = text.slice(0, max);
-    var sp = cut.lastIndexOf(' ');
-    return (sp > max * 0.6 ? cut.slice(0, sp) : cut).replace(/[\s,;:.—-]+$/, '') + '…';
-  }
-
-  function addBubble(agentPos, kind, text, holdMs, typed, liftPx) {
-    if (!bubbleLayer || !text) return;
-    text = clipForScreen(text, kind);
-    var el = document.createElement('div');
-    el.className = 'map-bubble ' + kind;
-    bubbleLayer.appendChild(el);
-    if (typed) typewrite(el, text); else el.textContent = text;
-
-    var above = kind !== 'do-caption';
-    // A bubble lives in MAP space: its anchor is a map point, and everything
-    // the placement pass below does (flip, panel nudge, collision lift) is kept
-    // as a screen-pixel offset from that anchor. repositionBubbles() re-derives
-    // left/top from both on every pan/zoom — before this, a bubble was placed
-    // once in viewport pixels and stayed put while the island was dragged away
-    // from under it (seen live: Kevin's thought cloud floating in open sea).
-    el._anchor = { x: agentPos.x, y: agentPos.y + (above ? -34 : 16) };
-    el._off = { x: 0, y: liftPx || 0 };
-    var pt = mapToPixel(el._anchor.x, el._anchor.y);
-    el.style.left = pt.left + 'px';
-    el.style.top = (pt.top + el._off.y) + 'px';
-
+  /** One (icon, label, text) row — a `<details>`-free "more" toggle appears
+   *  only once the text is MEASURED to overflow its 4-line clamp (so short
+   *  turns, the common case, never show a pointless button). */
+  function buildCaptionRow(kind, icon, label, text) {
+    var row = document.createElement('div');
+    row.className = 'caption-row caption-row-' + kind;
+    var iconEl = document.createElement('span');
+    iconEl.className = 'caption-icon';
+    iconEl.setAttribute('aria-hidden', 'true');
+    iconEl.textContent = icon;
+    var labelEl = document.createElement('span');
+    labelEl.className = 'caption-label';
+    labelEl.textContent = label;
+    var wrap = document.createElement('div');
+    wrap.className = 'caption-text-wrap';
+    var textEl = document.createElement('p');
+    textEl.className = 'caption-text clamped';
+    textEl.textContent = text; // model text — textContent only, never innerHTML
+    var moreBtn = document.createElement('button');
+    moreBtn.type = 'button';
+    moreBtn.className = 'caption-more';
+    moreBtn.textContent = 'more';
+    moreBtn.hidden = true;
+    moreBtn.addEventListener('click', function () {
+      var expanded = textEl.classList.toggle('expanded');
+      moreBtn.textContent = expanded ? 'less' : 'more';
+    });
+    wrap.appendChild(textEl);
+    wrap.appendChild(moreBtn);
+    row.appendChild(iconEl);
+    row.appendChild(labelEl);
+    row.appendChild(wrap);
     requestAnimationFrame(function () {
-      var wrapRect = mapWrap.getBoundingClientRect();
-      var r = el.getBoundingClientRect();
-      el.classList.remove('flip-left', 'flip-right');
-      if (r.left < wrapRect.left + 8) el.classList.add('flip-left');
-      else if (r.right > wrapRect.right - 8) el.classList.add('flip-right');
-      // Flipping only changes the horizontal half of the translate (see the
-      // CSS) — re-measure so `r` below reflects the flipped box, but a flip
-      // can never change top/bottom, so this exists for correctness, not
-      // because the collision pass below needs it to.
-      r = el.getBoundingClientRect();
+      if (textEl.scrollHeight - textEl.clientHeight > 6) moreBtn.hidden = false;
+    });
+    return row;
+  }
 
-      // Layout fix #3: never let a bubble sit on top of the right-hand scene
-      // card. flip-left/flip-right above only keeps a bubble inside the
-      // VIEWPORT, which says nothing about the panel floating over part of
-      // it — only the desktop right dock ever overlaps bubble territory (the
-      // phone sheet lives at the bottom, below where a "-34"-lifted or even a
-      // do-caption bubble flies), so this only runs there.
-      var panelEl = document.getElementById('island-panel');
-      if (panelEl && window.innerWidth >= 1024) {
-        var panelRect = panelEl.getBoundingClientRect();
-        if (panelRect.width > 0 && r.right > panelRect.left - 8 && r.bottom > panelRect.top && r.top < panelRect.bottom) {
-          el.style.left = (parseFloat(el.style.left) - (r.right - (panelRect.left - 8))) + 'px';
-          r = el.getBoundingClientRect();
-        }
-      }
+  /** Renders the caption card for turn `t` (poll shape: say/thought/do/
+   *  activity/location, plus `sceneMode` from the caller) — the ONE place
+   *  that decides what the card looks like, used both for a live turn
+   *  arriving over the poll and, once, to take over the server-rendered
+   *  card at load (see initCaptionFromSSR). Rows fade in staggered by
+   *  ~1.2s each (thought, then say, then do — whichever are actually
+   *  present; an empty one is skipped, never leaving a gap in the timing)
+   *  via a per-row `transition-delay` set inline — `instant` skips the
+   *  stagger entirely (used for "show the latest turn instantly on load").
+   *  Returns the say/thought/do text actually shown, so the caller can size
+   *  the hold time off exactly what's on screen (a hidden-by-toggle thought
+   *  doesn't buy the card extra time). */
+  function showCaption(t, sceneMode, instant) {
+    if (!captionCard) return null;
+    var say = !isPlaceholderNothing(t.say) ? t.say : '';
+    var thoughtsOn = !(islandRoot && islandRoot.classList.contains('thoughts-off'));
+    var thought = (t.thought && thoughtsOn) ? t.thought : '';
+    var doText = !isPlaceholderNothing(t.do) ? t.do : '';
 
-      // Collision avoidance for "above" bubbles: keep nudging this one
-      // further up, past whatever it still overlaps, until nothing on
-      // screen is in the way or a sane number of passes runs out (a stack
-      // of many simultaneous bubbles is already an edge case the SPEC
-      // doesn't promise to keep short — this just stops it looking broken).
-      // do-caption bubbles skip this: they anchor below the figure's own
-      // feet, a different band from every "above" bubble, and a caption
-      // chasing an unrelated say/thought bubble upward would drift away
-      // from the figure it's actually about.
-      if (above) {
-        activeAboveRects = activeAboveRects.filter(function (b) { return b.el.parentNode; });
-        var guard = 0;
-        while (guard++ < 6) {
-          var hit = null;
-          for (var i = 0; i < activeAboveRects.length; i++) {
-            if (activeAboveRects[i].el !== el && rectsOverlap(r, activeAboveRects[i])) { hit = activeAboveRects[i]; break; }
-          }
-          if (!hit) break;
-          var shiftUp = r.bottom - hit.top + 6;
-          el.style.top = (parseFloat(el.style.top) - shiftUp) + 'px';
-          r = el.getBoundingClientRect();
-        }
-        activeAboveRects.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom, el: el });
-      }
+    var order = [];
+    if (thought) order.push({ kind: 'thought', icon: '💭', label: 'Thinks', text: thought });
+    if (say) order.push({ kind: 'say', icon: '💬', label: 'Says', text: say });
+    if (doText) order.push({ kind: 'do', icon: '✋', label: 'Does', text: doText });
 
-      // Layout fix #3's other half of "stay inside the viewport": the
-      // collision pass above only ever pushes a bubble UP, with no floor —
-      // a short viewport, or several bubbles stacked at one shared location
-      // (Kevin + Jenny both speaking at the cottage), can walk one straight
-      // off the top edge. A final clamp back down to a small margin is
-      // enough; it can reintroduce the very overlap the pass just resolved,
-      // but a slight overlap reads far better than a bubble that's simply
-      // gone.
-      // Never under the top HUD: on phones it is two rows deep (wordmark +
-      // clock, then the icon row at top:96px), on desktop one.
-      var minTop = window.innerWidth <= 680 ? 150 : 70;
-      if (r.top < minTop) {
-        el.style.top = (parseFloat(el.style.top) + (minTop - r.top)) + 'px';
-      }
+    if (!order.length) {
+      // A fully silent turn (nothing to say, no visible action, and either
+      // no thought or thoughts toggled off) never "replaces" anything —
+      // leave whatever caption/badge is already on screen exactly as it is
+      // (empty at first load, otherwise the previous real turn) rather than
+      // blanking the card for a turn with nothing to show.
+      return null;
+    }
+    captionCard.setAttribute('data-speaker', t.speaker);
+    captionCard.hidden = false;
+    while (captionCard.firstChild) captionCard.removeChild(captionCard.firstChild);
 
-      var base = mapToPixel(el._anchor.x, el._anchor.y);
-      el._off = { x: parseFloat(el.style.left) - base.left, y: parseFloat(el.style.top) - base.top };
-      el.classList.add('visible');
+    var head = document.createElement('div');
+    head.className = 'caption-head';
+    var dot = document.createElement('span');
+    dot.className = 'caption-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    var nameEl = document.createElement('span');
+    nameEl.className = 'caption-name';
+    nameEl.textContent = agentName(t.speaker);
+    var metaEl = document.createElement('span');
+    metaEl.className = 'caption-meta';
+    var locEntry = LOCINFO[t.location];
+    metaEl.textContent = (locEntry ? ' — at ' + locEntry.name : '') + (t.activity ? ' · ' + t.activity : '') + (sceneMode === 'apart' ? ' · alone' : '');
+    head.appendChild(dot); head.appendChild(nameEl); head.appendChild(metaEl);
+    captionCard.appendChild(head);
+
+    var body = document.createElement('div');
+    body.className = 'caption-body';
+    captionCard.appendChild(body);
+
+    var rows = [];
+    order.forEach(function (r, i) {
+      var row = buildCaptionRow(r.kind, r.icon, r.label, r.text);
+      row.style.transitionDelay = instant ? '0ms' : (i * 1200) + 'ms';
+      body.appendChild(row);
+      rows.push(row);
+    });
+    // Two rAFs: the first lets the browser paint the rows at opacity 0 (their
+    // base state), the second then flips the class so the transition
+    // actually runs instead of the browser coalescing both changes into one
+    // frame with no visible transition at all.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        rows.forEach(function (row) { row.classList.add('caption-in'); });
+      });
     });
 
-    setTimeout(function () {
-      el.classList.remove('visible');
-      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 400);
-    }, holdMs);
+    return { say: say, thought: thought, doText: doText };
   }
 
-  // ── per-agent queues: independent so apart scenes animate both figures
-  // at once instead of alternating ──
-  var queues = { kevin: [], jenny: [] };
-  var playing = { kevin: false, jenny: false };
+  /** Item A: "never covers the acting figure — if it would, pan the map so
+   *  the figure sits above it." A one-shot corrective pan (reuses setView/
+   *  clampView, not Follow mode's re-centre-and-zoom) run once right after a
+   *  turn's figure settles — never fights a visitor's own subsequent drag. */
+  function ensureFigureClearOfCaption(agent) {
+    if (!captionCard || captionCard.hidden || !mapWrap) return;
+    var pin = mapWrap.querySelector('.pin[data-agent="' + agent + '"]');
+    if (!pin || typeof pin.getBoundingClientRect !== 'function') return;
+    var capRect = captionCard.getBoundingClientRect();
+    if (capRect.width <= 0 || capRect.height <= 0) return;
+    var pinRect = pin.getBoundingClientRect();
+    // Pad generously — the figure's visible footprint (name label above,
+    // shadow below) is bigger than the SVG group's own tight bbox.
+    var figTop = pinRect.top - 44, figBottom = pinRect.bottom + 14;
+    var figLeft = pinRect.left - 24, figRight = pinRect.right + 24;
+    var overlap = figLeft < capRect.right && figRight > capRect.left && figTop < capRect.bottom && figBottom > capRect.top;
+    if (!overlap) return;
+    var shiftUp = Math.min(220, figBottom - capRect.top + 18);
+    if (shiftUp <= 0) return;
+    setView(view.scale, view.tx, view.ty - shiftUp, true);
+  }
+
+  /** Positions the caption card's `max-width` on desktop so it can never
+   *  overlap the right-docked scene panel OR the bottom-right zoom cluster —
+   *  measured live rather than hardcoded, so it self-corrects if either
+   *  one's own CSS changes (same philosophy as fitView()'s panelReserve()
+   *  below). Phones don't need this: `.caption-card` there is `left:16px;
+   *  right:16px` in plain CSS. Also toggles visibility against the phone
+   *  bottom sheet's expanded state (see initPanel()). */
+  function updateCaptionLayout() {
+    if (!captionCard) return;
+    if (window.innerWidth < 1024) {
+      captionCard.style.maxWidth = '';
+      return;
+    }
+    var limit = window.innerWidth - 16;
+    ['.zoom-cluster', '#island-panel'].forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (!el) return;
+      var r = el.getBoundingClientRect();
+      if (r.width > 0 && r.left < limit) limit = r.left;
+    });
+    var maxW = Math.max(240, Math.min(640, limit - 16 - 16));
+    captionCard.style.maxWidth = maxW + 'px';
+  }
+
+  // ── the badge + glow ring over whoever's turn is currently narrated —
+  // replaces the old floating say/thought/do bubbles; nothing else floats
+  // over the map. Only ONE agent is ever "active" at a time now (the
+  // director below plays one turn at a time across both agents). ──
+  var badgeEls = { kevin: null, jenny: null };
+  var activeAgent = null;
+
+  function ensureBadge(agent) {
+    if (badgeEls[agent]) return badgeEls[agent];
+    if (!badgeLayer) return null;
+    var el = document.createElement('div');
+    el.className = 'map-badge ' + agent;
+    badgeLayer.appendChild(el);
+    badgeEls[agent] = el;
+    return el;
+  }
+
+  function positionBadge(el) {
+    if (!el || !el._anchor) return;
+    var pt = mapToPixel(el._anchor.x, el._anchor.y);
+    el.style.left = pt.left + 'px';
+    el.style.top = pt.top + 'px';
+  }
+
+  /** `kind` is 'say' | 'thought' | 'do' — whichever row is the "headline" of
+   *  what's currently shown (say beats thought beats do, matching the
+   *  caption's own row order). Also marks the figure's `.pin[data-active]`
+   *  (island-map.tsx's `.fig-active-ring`). */
+  function setActive(agent, kind) {
+    clearActive();
+    activeAgent = agent;
+    var pin = mapWrap && mapWrap.querySelector('.pin[data-agent="' + agent + '"]');
+    if (pin) pin.setAttribute('data-active', kind);
+    var el = ensureBadge(agent);
+    if (!el) return;
+    el.textContent = kind === 'say' ? '💬' : kind === 'thought' ? '💭' : '✋';
+    el._anchor = { x: currentPos[agent].x, y: currentPos[agent].y - 34 };
+    positionBadge(el);
+    el.classList.add('visible');
+  }
+
+  function clearActive() {
+    if (!activeAgent) return;
+    var pin = mapWrap && mapWrap.querySelector('.pin[data-agent="' + activeAgent + '"]');
+    if (pin) pin.removeAttribute('data-active');
+    var el = badgeEls[activeAgent];
+    if (el) el.classList.remove('visible');
+    activeAgent = null;
+  }
+
+  /** Repositions the active badge on every pan/zoom transform — the map-
+   *  space anchor is fixed per turn (set in setActive above), this just
+   *  re-derives its on-screen pixel position, the same job the old
+   *  repositionBubbles() did for the floating text bubbles it replaced. */
+  function repositionOverlay() {
+    if (!badgeLayer || !activeAgent) return;
+    positionBadge(badgeEls[activeAgent]);
+  }
+
+  // ── per-agent walk/pose state (still per-agent — only the TURN QUEUE
+  // below became global) ──
   var lastLoc = { kevin: null, jenny: null };
   var currentPos = {};
 
@@ -628,10 +730,7 @@
   /** Reads a `.pin`'s CURRENT `translate(x, y)` attribute straight off the
    *  DOM, rather than recomputing it from LOCATIONS — the server already
    *  applied the shared-location dx spread AND the activity offset
-   *  (island-map.tsx's AgentFigure), and re-deriving only the bare location
-   *  centre here made Kevin's and Jenny's initial bubbles land on the exact
-   *  same point and overlap unreadably whenever they share a place (found
-   *  live: two "at the cottage" bubbles stacked into one smear of text). */
+   *  (island-map.tsx's AgentFigure). */
   function readPinPos(pin) {
     var t = pin.getAttribute('transform') || '';
     var m = /translate\(\s*([\-\d.]+)[,\s]+([\-\d.]+)\s*\)/.exec(t);
@@ -659,47 +758,51 @@
     if (followOn && followedAgent === agent) panFollowTo(currentPos[agent].x, currentPos[agent].y, true);
   }
 
-  function playNext(agent) {
-    if (playing[agent]) return;
-    var q = queues[agent];
-    if (!q || !q.length) return;
-    var pin = mapWrap.querySelector('.pin[data-agent="' + agent + '"]');
-    if (!pin) { q.length = 0; return; }
-    playing[agent] = true;
-    var t = q.shift();
+  // ─────────────────────────────────────────────────────────────────────────
+  // THE DIRECTOR — poll → queue → play. ONE global queue across BOTH agents
+  // (item B: "one turn at a time across both characters... at most one
+  // caption at a time"), so an apart scene's two independent storylines now
+  // play in arrival order instead of animating simultaneously. When the
+  // backlog grows past 4 waiting turns, holds shorten to max(5s, hold/2)
+  // until the queue catches back up — never drops a turn, just reads faster.
+  // ─────────────────────────────────────────────────────────────────────────
+  var turnQueue = [];
+  var playingTurn = false;
 
-    // "Follow whoever's acting in the current turn" — SPEC3's Follow button.
+  function playNextGlobal() {
+    if (playingTurn) return;
+    if (!turnQueue.length) return;
+    playingTurn = true;
+    var t = turnQueue.shift();
+    var agent = t.speaker;
+    var pin = mapWrap && mapWrap.querySelector('.pin[data-agent="' + agent + '"]');
+    if (!pin) { playingTurn = false; playNextGlobal(); return; }
+
     if (followOn) followedAgent = agent;
 
+    // Deliberately does NOT clearActive() here — the badge/glow ring is part
+    // of "what's currently shown" exactly like the caption card text is, so
+    // it stays through the gap between this turn's hold expiring and the
+    // next one actually starting (an empty queue can leave that gap open
+    // for a while). setActive() below clears the PREVIOUS turn's badge
+    // itself, atomically, the moment a new one is ready to show — so there
+    // is never a visible instant with no one marked as speaking while a
+    // turn's own text is still on screen.
     function afterHold() {
-      playing[agent] = false;
-      pin.removeAttribute('data-speaking');
-      if (q.length) playNext(agent);
+      playingTurn = false;
+      playNextGlobal();
     }
 
     function showAndHold() {
       settlePose(agent, pin, t.activity, t.location);
-      var say = !isPlaceholderNothing(t.say) ? t.say : '';
-      var thought = t.thought || '';
-      var doText = !isPlaceholderNothing(t.do) ? t.do : '';
-      if (!say && !thought && !doText) { afterHold(); return; }
-      var backlog = q.length;
-      var readMs = readingTimeMs(say || doText || thought);
-      var holdMs = backlog > 3 ? readMs : Math.max(readMs, 20000);
-      var lift = (lastLoc.kevin && lastLoc.kevin === lastLoc.jenny && agent === 'jenny') ? 54 : 0;
-      // Same spot (a together scene) = one turn on screen at a time: two
-      // people's say/thought/action stacks at one place piled into each
-      // other on desktop too (seen live 2026-09-25). Apart, both can show.
-      var sameSpot = lastLoc.kevin && lastLoc.kevin === lastLoc.jenny;
-      if (isPhone() || sameSpot) { clearBubbles(); lift = 0; }
-      if (isPhone()) {
-        var pick = phonePick(say, thought, doText);
-        say = pick.say; thought = pick.thought; doText = pick.doText;
-      }
-      if (say) { pin.setAttribute('data-speaking', '1'); addBubble(currentPos[agent], 'say', say, holdMs, true, lift); }
-      if (thought) addBubble(currentPos[agent], 'thought', thought, holdMs, false, lift - (say ? THOUGHT_STACK_PX : 0));
-      if (doText) addBubble(currentPos[agent], 'do-caption', doText, holdMs, false, lift);
-      setTimeout(afterHold, holdMs);
+      var shown = showCaption(t, t.mode, false);
+      if (!shown) { afterHold(); return; }
+      var kind = shown.say ? 'say' : shown.thought ? 'thought' : 'do';
+      setActive(agent, kind);
+      requestAnimationFrame(function () { ensureFigureClearOfCaption(agent); });
+      var hold = captionHoldMs(shown.say, shown.thought, shown.doText);
+      if (turnQueue.length > 4) hold = Math.max(5000, hold / 2);
+      setTimeout(afterHold, hold);
     }
 
     if (t.location && t.location !== lastLoc[agent]) {
@@ -717,42 +820,33 @@
   }
 
   function enqueueTurn(t) {
-    if (!queues[t.speaker]) return;
-    queues[t.speaker].push(t);
-    playNext(t.speaker);
+    turnQueue.push(t);
+    playNextGlobal();
   }
 
-  /** On first paint: show each agent's most recent turn instantly, at their
-   *  current pose — no walk, no queue, no replay of history (SPEC2 §B,
-   *  still true under SPEC3). #__LATEST_TURNS__ is server-printed from the
-   *  same scene turns the live panel already shows. */
-  function showInitialBubbles() {
-    var el = document.getElementById('__LATEST_TURNS__');
-    if (!el) return;
-    var data = {};
-    try { data = JSON.parse(el.textContent || '{}'); } catch (e) { return; }
-    var agents = ['kevin', 'jenny'];
-    var together = lastLoc.kevin && lastLoc.kevin === lastLoc.jenny;
-    if (isPhone() || together) {
-      // Only whoever spoke LAST (highest turn id), not both.
-      var k = data.kevin, j = data.jenny;
-      agents = (k && j) ? [((j.id || 0) > (k.id || 0)) ? 'jenny' : 'kevin'] : (k ? ['kevin'] : ['jenny']);
-    }
-    agents.forEach(function (agent) {
-      var t = data[agent];
-      if (!t) return;
-      var pos = currentPos[agent];
-      if (!pos) return;
-      var say = !isPlaceholderNothing(t.say) ? t.say : '';
-      var thought = t.thought || '';
-      var doText = !isPlaceholderNothing(t.do) ? t.do : '';
-      var holdMs = readingTimeMs(say || doText || thought);
-      var lift = (lastLoc.kevin && lastLoc.kevin === lastLoc.jenny && agent === 'jenny') ? 54 : 0;
-      if (isPhone()) { var pk = phonePick(say, thought, doText); say = pk.say; thought = pk.thought; doText = pk.doText; lift = 0; }
-      if (say) addBubble(pos, 'say', say, holdMs, false, lift);
-      if (thought) addBubble(pos, 'thought', thought, holdMs, false, lift - (say ? THOUGHT_STACK_PX : 0));
-      if (doText) addBubble(pos, 'do-caption', doText, holdMs, false, lift);
-    });
+  /** On first paint: take over the server-rendered caption card (#__LATEST_
+   *  TURN__, printed from the exact same data the live scene panel already
+   *  shows) through the SAME showCaption() a live turn uses — never a
+   *  second "what does a caption look like" implementation — but `instant`
+   *  so it's already fully revealed, no replay (SPEC2 §B, still true here:
+   *  "show the current state, don't replay history"). Also arms the hold
+   *  timer + badge/ring so the director's queue waits its turn exactly like
+   *  it would for any other turn. */
+  function initCaptionFromSSR() {
+    var el = document.getElementById('__LATEST_TURN__');
+    if (!el) { playingTurn = false; return; }
+    var t;
+    try { t = JSON.parse(el.textContent || 'null'); } catch (e) { t = null; }
+    if (!t || !t.speaker || !currentPos[t.speaker]) { playingTurn = false; return; }
+    var shown = showCaption(t, t.mode, true);
+    if (!shown) { playingTurn = false; return; }
+    var kind = shown.say ? 'say' : shown.thought ? 'thought' : 'do';
+    playingTurn = true;
+    setActive(t.speaker, kind);
+    requestAnimationFrame(function () { ensureFigureClearOfCaption(t.speaker); });
+    var hold = captionHoldMs(shown.say, shown.thought, shown.doText);
+    // Same "don't clear early" rule as playNextGlobal()'s afterHold() above.
+    setTimeout(function () { playingTurn = false; playNextGlobal(); }, hold);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -796,21 +890,7 @@
     if (!mapStage) return;
     mapStage.style.transform = 'translate(' + view.tx.toFixed(1) + 'px,' + view.ty.toFixed(1) + 'px) scale(' + view.scale.toFixed(4) + ')';
     updateFigureScale();
-    repositionBubbles();
-  }
-
-  /** Bubbles follow the island: anchor (map units) → screen, plus the offset
-   *  the placement pass settled on. One getBoundingClientRect per call (inside
-   *  mapTransform), not per bubble. */
-  function repositionBubbles() {
-    if (!bubbleLayer || !bubbleLayer.children.length) return;
-    var t = mapTransform();
-    for (var i = 0; i < bubbleLayer.children.length; i++) {
-      var el = bubbleLayer.children[i];
-      if (!el._anchor) continue;
-      el.style.left = (t.offX + el._anchor.x * t.scale + el._off.x) + 'px';
-      el.style.top = (t.offY + el._anchor.y * t.scale + el._off.y) + 'px';
-    }
+    repositionOverlay();
   }
 
   /** Layout fix #3: counter-scale each figure by max(1, k/zoom) so it never
@@ -1134,7 +1214,7 @@
     var resizeTimer = null;
     window.addEventListener('resize', function () {
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(function () { readViewportSize(); clampView(view); applyStageTransform(); }, 120);
+      resizeTimer = setTimeout(function () { readViewportSize(); clampView(view); applyStageTransform(); updateCaptionLayout(); }, 120);
     });
   }
 
@@ -1224,14 +1304,34 @@
     if (!root) return;
     islandRoot = root;
     mapWrap = root.querySelector('.map-wrap');
-    bubbleLayer = document.getElementById('bubble-layer');
+    badgeLayer = document.getElementById('badge-layer');
+    captionCard = document.getElementById('caption-card');
     if (!mapWrap) return;
     svgEl = mapWrap.querySelector('svg');
     if (!svgEl) return;
     initFigures();
-    showInitialBubbles();
+    initCaptionFromSSR();
     initPanZoom();
     initLandmarks();
+    updateCaptionLayout();
+  }
+
+  /** Mirrors src/world/prompts.ts's energy/mood-word thresholds via
+   *  nowWordJS (above) to keep the "now" chips current from /api/poll's
+   *  world.agents, without a page reload. */
+  function updateNowChips(world) {
+    if (!world || !world.agents) return;
+    ['kevin', 'jenny'].forEach(function (id) {
+      var a = world.agents[id];
+      if (!a) return;
+      var el = document.getElementById('now-text-' + id);
+      if (!el) return;
+      var loc = LOCINFO[a.location];
+      var name = id === 'kevin' ? 'Kevin' : 'Jenny';
+      el.textContent = name + ' — ' + (loc ? loc.short : a.location) + ' · ' + a.activity + ' · ' + nowWordJS(a);
+      var chip = document.getElementById('now-chip-' + id);
+      if (chip) chip.setAttribute('aria-label', name + ' — at ' + (loc ? loc.name : a.location) + ', ' + a.activity + ', ' + nowWordJS(a) + '. Open their character card');
+    });
   }
 
   function updateWeather(world) {
@@ -1257,6 +1357,7 @@
       var slotLabel = world.slot.charAt(0).toUpperCase() + world.slot.slice(1);
       status.textContent = 'Day ' + world.day + ' · ' + slotLabel + ' · ' + (world.weather.line || '') + ' · tide ' + world.tide;
     }
+    updateNowChips(world);
   }
 
   // ── the live panel: bottom sheet (phone) / floating card (desktop) ──
@@ -1268,8 +1369,14 @@
     if (handle) {
       handle.addEventListener('click', function () {
         var open = panel.getAttribute('data-expanded') === 'true';
-        panel.setAttribute('data-expanded', open ? 'false' : 'true');
-        handle.setAttribute('aria-expanded', open ? 'false' : 'true');
+        var next = !open;
+        panel.setAttribute('data-expanded', next ? 'true' : 'false');
+        handle.setAttribute('aria-expanded', next ? 'true' : 'false');
+        // On phones the caption card docks directly above the COLLAPSED
+        // sheet (item A) — an expanded sheet already shows every turn in
+        // full, so the floating card steps aside rather than fighting it
+        // for the same strip of screen.
+        if (captionCard) captionCard.classList.toggle('panel-expanded', next);
       });
     }
     if (collapseBtn) {
@@ -1278,6 +1385,11 @@
         panel.setAttribute('data-collapsed', collapsed ? 'false' : 'true');
         collapseBtn.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
         collapseBtn.textContent = collapsed ? '«' : '»';
+        // Collapsing the desktop dock frees up the caption card's reserved
+        // width — re-measure (updateCaptionLayout reads the panel's live
+        // rect, so a collapsed 44px tab vs. the full 360px card both just
+        // fall out of the same measurement).
+        updateCaptionLayout();
       });
     }
   }
@@ -1341,7 +1453,6 @@
               enqueueTurn(t);
             });
             since = data.latest_turn_id || since;
-            if (latestInput) latestInput.value = String(since);
             if (presence && data.world && sceneMode !== 'apart') {
               var last = data.new_turns[data.new_turns.length - 1];
               var next = last.speaker === 'kevin' ? 'jenny' : 'kevin';
@@ -1372,5 +1483,6 @@
     initPoll();
     initBottleForms();
     initIsland();
+    initHowTo();
   });
 })();

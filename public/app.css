@@ -188,22 +188,25 @@ body.v-map {
 }
 .ocean-shimmer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
 .ocean-shimmer-stroke {
-  fill: none; stroke: #fffdf6; stroke-opacity: .28; stroke-width: 2.2; stroke-linecap: round;
-  animation: oceanShimmerDrift var(--dur, 9s) ease-in-out var(--delay, 0s) infinite;
+  fill: none; stroke: #fffdf6; stroke-opacity: .22; stroke-width: 2.2; stroke-linecap: round;
+  animation: oceanShimmerDrift var(--dur, 13.5s) ease-in-out var(--delay, 0s) infinite;
 }
+/* Calmer motion pass: durations ×1.5 (island-map.tsx's OceanShimmer() now
+   seeds 10.5-19.5s instead of 7-13s) and a lower peak opacity. */
 @keyframes oceanShimmerDrift {
-  0%, 100% { transform: translateX(0); opacity: .16; }
-  50% { transform: translateX(22px); opacity: .34; }
+  0%, 100% { transform: translateX(0); opacity: .12; }
+  50% { transform: translateX(22px); opacity: .26; }
 }
 /* Weather + time of day (owner: "weather affects the sea … calmer at
    night, bigger/faster/more whitecaps when windy or storm, glassy in
    heat") — scoped to `.island-root`, the shared ancestor of `.ocean-layer`
    (a sibling of `.map-wrap`, not a descendant of it, so `.map-wrap`'s own
-   `[data-weather]` can't reach it — see script.js's updateWeather()). */
+   `[data-weather]` can't reach it — see script.js's updateWeather()).
+   Durations ×1.5 from the original SPEC3 numbers, same pass as above. */
 .island-root[data-weather="storm"] .ocean-shimmer-stroke,
-.island-root[data-weather="windy"] .ocean-shimmer-stroke { animation-duration: 2.8s; stroke-opacity: .4; stroke-width: 2.8; }
-.island-root[data-slot="night"] .ocean-shimmer-stroke { animation-duration: 12s; stroke-opacity: .12; }
-.island-root[data-weather="heat"] .ocean-shimmer-stroke { animation-duration: 15s; stroke-opacity: .2; }
+.island-root[data-weather="windy"] .ocean-shimmer-stroke { animation-duration: 4.2s; stroke-opacity: .32; stroke-width: 2.8; }
+.island-root[data-slot="night"] .ocean-shimmer-stroke { animation-duration: 18s; stroke-opacity: .1; }
+.island-root[data-weather="heat"] .ocean-shimmer-stroke { animation-duration: 22.5s; stroke-opacity: .16; }
 
 /* the pan/zoom viewport + stage (public/script.js's PanZoom module) */
 .island-viewport {
@@ -268,8 +271,14 @@ body.v-map {
    zoom lives on `.map-stage`, an ANCESTOR of `.pin` — completely separate
    transform, never fought over. */
 .pin { transition: none; }
-.pin-bob { animation: pinBob 3.6s ease-in-out infinite; transform-origin: center; }
-@keyframes pinBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+/* Calmer motion pass (owner: "movement... so fast") — every pose loop below
+   (bob, and every activity-specific limb swing further down) has its
+   duration roughly doubled and its amplitude cut by about 30% from the
+   original SPEC3 numbers. Ambient scenery (chimney smoke, the lighthouse
+   lamp, fog drift) is untouched — this is about the AGENTS reading as calm,
+   not the island itself. */
+.pin-bob { animation: pinBob 7.2s ease-in-out infinite; transform-origin: center; }
+@keyframes pinBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 /* Layout fix #3 (lead review: Kevin & Jenny are tiny at the fit zoom).
    public/script.js writes `style.transform: scale(...)` here every time the
    map's pan/zoom scale changes, counter-scaling the figure (+ its name
@@ -284,8 +293,11 @@ body.v-map {
 @media (prefers-reduced-motion: reduce) { .pin-scale { transition: none; } }
 .figure-link { cursor: pointer; }
 
-.wave-drift { animation: waveDrift 5s ease-in-out infinite; transform-origin: center; }
-@keyframes waveDrift { 0%, 100% { transform: translateX(0); opacity: .22; } 50% { transform: translateX(6px); opacity: .4; } }
+/* Calmer motion pass: ocean shimmer/surf/waves run ×1.5 slower with a
+   somewhat lower peak opacity — see island-map.tsx's OceanShimmer() for the
+   shimmer strokes' own duration (also ×1.5 there). */
+.wave-drift { animation: waveDrift 7.5s ease-in-out infinite; transform-origin: center; }
+@keyframes waveDrift { 0%, 100% { transform: translateX(0); opacity: .17; } 50% { transform: translateX(6px); opacity: .32; } }
 
 /* surf — 3 rings tracing the coastline (island-map.tsx's Surf()/SURF_RINGS),
    each swelling outward and fading, staggered by animation-delay so they
@@ -296,24 +308,25 @@ body.v-map {
 .surf-ring {
   fill: none; stroke: #fffdf6; stroke-linecap: round;
   transform-box: fill-box; transform-origin: center;
-  animation: surfSwell 4.6s ease-out infinite;
+  animation: surfSwell 6.9s ease-out infinite;
 }
 .surf-ring-0 { stroke-width: 2.4; animation-delay: 0s; }
-.surf-ring-1 { stroke-width: 1.8; animation-delay: 1.55s; }
-.surf-ring-2 { stroke-width: 1.3; animation-delay: 3.05s; }
+.surf-ring-1 { stroke-width: 1.8; animation-delay: 2.3s; }
+.surf-ring-2 { stroke-width: 1.3; animation-delay: 4.6s; }
 @keyframes surfSwell {
   0% { transform: scale(.988); opacity: 0; }
-  18% { opacity: .55; }
-  65% { opacity: .22; }
+  18% { opacity: .42; }
+  65% { opacity: .17; }
   100% { transform: scale(1.03); opacity: 0; }
 }
 /* Weather + time of day — `.surf-ring` lives inside `.map-wrap`, which
    already carries `data-weather`/`data-slot` itself (script.js's
-   updateWeather()), so no extra mirroring is needed here. */
+   updateWeather()), so no extra mirroring is needed here. Durations ×1.5
+   from the original SPEC3 numbers, same calmer-motion pass as above. */
 .map-wrap[data-weather="storm"] .surf-ring,
-.map-wrap[data-weather="windy"] .surf-ring { animation-duration: 2.4s; }
-.map-wrap[data-slot="night"] .surf-ring { animation-duration: 7.5s; }
-.map-wrap[data-weather="heat"] .surf-ring { animation-duration: 8s; }
+.map-wrap[data-weather="windy"] .surf-ring { animation-duration: 3.6s; }
+.map-wrap[data-slot="night"] .surf-ring { animation-duration: 11.25s; }
+.map-wrap[data-weather="heat"] .surf-ring { animation-duration: 12s; }
 
 @media (prefers-reduced-motion: reduce) {
   .surf-ring { animation: none; opacity: .3; }
@@ -418,78 +431,80 @@ body.v-map {
 /* idle — a slow breath, nothing else */
 .pin[data-activity="idle"] .fig-torso,
 .pin[data-activity="eating"] .fig-torso,
-.pin[data-activity="cooking"] .fig-torso { animation: figBreathe 3.4s ease-in-out infinite; }
-@keyframes figBreathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.05); } }
+.pin[data-activity="cooking"] .fig-torso { animation: figBreathe 6.8s ease-in-out infinite; }
+@keyframes figBreathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.035); } }
 
 /* resting — sit a little lower, one arm relaxed */
 .pin[data-activity="resting"] .fig-body,
 .pin[data-activity="eating"] .fig-body { transform: translateY(2.5px); }
 
 /* talking — a small, slow gesture; never the big working swings below */
-.pin[data-activity="talking"] .fig-arm-r { animation: figTalk 2.6s ease-in-out infinite; }
-@keyframes figTalk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-9deg); } }
+.pin[data-activity="talking"] .fig-arm-r { animation: figTalk 5.2s ease-in-out infinite; }
+@keyframes figTalk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-6deg); } }
 
 /* walking — leg scissor + counter-swinging arms, shown only mid-tween
-   (script.js sets data-activity="walking" for the duration of the move) */
-.pin[data-activity="walking"] .fig-leg-l { animation: figLegA .62s ease-in-out infinite; }
-.pin[data-activity="walking"] .fig-leg-r { animation: figLegB .62s ease-in-out infinite; }
-.pin[data-activity="walking"] .fig-arm-l { animation: figLegB .62s ease-in-out infinite; }
-.pin[data-activity="walking"] .fig-arm-r { animation: figLegA .62s ease-in-out infinite; }
-@keyframes figLegA { 0%, 100% { transform: rotate(16deg); } 50% { transform: rotate(-16deg); } }
-@keyframes figLegB { 0%, 100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
+   (script.js sets data-activity="walking" for the duration of the move —
+   also slowed in the calmer-motion pass, min 4s/max 12s at ~45 map
+   units/s, half the original speed). */
+.pin[data-activity="walking"] .fig-leg-l { animation: figLegA 1.24s ease-in-out infinite; }
+.pin[data-activity="walking"] .fig-leg-r { animation: figLegB 1.24s ease-in-out infinite; }
+.pin[data-activity="walking"] .fig-arm-l { animation: figLegB 1.24s ease-in-out infinite; }
+.pin[data-activity="walking"] .fig-arm-r { animation: figLegA 1.24s ease-in-out infinite; }
+@keyframes figLegA { 0%, 100% { transform: rotate(11deg); } 50% { transform: rotate(-11deg); } }
+@keyframes figLegB { 0%, 100% { transform: rotate(-11deg); } 50% { transform: rotate(11deg); } }
 
 /* fishing — rod arm dips slowly; the float bobs on the water */
-.pin[data-activity="fishing"] .fig-arm-r { animation: figFishArm 3.2s ease-in-out infinite; }
-@keyframes figFishArm { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(6deg); } }
-.rod-float { animation: figFloatBob 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
-@keyframes figFloatBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(2px); } }
+.pin[data-activity="fishing"] .fig-arm-r { animation: figFishArm 6.4s ease-in-out infinite; }
+@keyframes figFishArm { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
+.rod-float { animation: figFloatBob 3.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes figFloatBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1.4px); } }
 
 /* chopping — a real swing, with chips flicking off on the downstroke */
-.pin[data-activity="chopping"] .fig-arm-r { animation: figChop 1.05s ease-in infinite; transform-box: fill-box; }
-@keyframes figChop { 0%, 55% { transform: rotate(-46deg); } 62% { transform: rotate(14deg); } 100% { transform: rotate(-46deg); } }
+.pin[data-activity="chopping"] .fig-arm-r { animation: figChop 2.1s ease-in infinite; transform-box: fill-box; }
+@keyframes figChop { 0%, 55% { transform: rotate(-32deg); } 62% { transform: rotate(10deg); } 100% { transform: rotate(-32deg); } }
 .chip { opacity: 0; transform-box: fill-box; }
-.pin[data-activity="chopping"] .chip-1 { animation: figChip 1.05s ease-out infinite; }
-.pin[data-activity="chopping"] .chip-2 { animation: figChip 1.05s ease-out .08s infinite; }
-@keyframes figChip { 0%, 58% { opacity: 0; transform: translate(0, 0); } 64% { opacity: 1; transform: translate(2px, -1px); } 82% { opacity: 0; transform: translate(6px, -6px); } 100% { opacity: 0; } }
+.pin[data-activity="chopping"] .chip-1 { animation: figChip 2.1s ease-out infinite; }
+.pin[data-activity="chopping"] .chip-2 { animation: figChip 2.1s ease-out .16s infinite; }
+@keyframes figChip { 0%, 58% { opacity: 0; transform: translate(0, 0); } 64% { opacity: 1; transform: translate(1.4px, -0.7px); } 82% { opacity: 0; transform: translate(4px, -4px); } 100% { opacity: 0; } }
 
 /* gardening — a small dig/hoe motion */
-.pin[data-activity="gardening"] .fig-arm-r { animation: figDig 1.7s ease-in-out infinite; }
-@keyframes figDig { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(20deg); } }
+.pin[data-activity="gardening"] .fig-arm-r { animation: figDig 3.4s ease-in-out infinite; }
+@keyframes figDig { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(14deg); } }
 
 /* sketching — the pencil hand flicks, the book hand stays still */
-.pin[data-activity="sketching"] .fig-arm-r { animation: figSketch 1.1s ease-in-out infinite; }
-@keyframes figSketch { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(4deg); } }
+.pin[data-activity="sketching"] .fig-arm-r { animation: figSketch 2.2s ease-in-out infinite; }
+@keyframes figSketch { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(3deg); } }
 
 /* repairing / building — a hammer tap, with a spark on the strike */
 .pin[data-activity="repairing"] .fig-arm-r,
-.pin[data-activity="building"] .fig-arm-r { animation: figHammer .82s ease-in infinite; transform-box: fill-box; }
-@keyframes figHammer { 0%, 45% { transform: rotate(-30deg); } 55% { transform: rotate(10deg); } 100% { transform: rotate(-30deg); } }
+.pin[data-activity="building"] .fig-arm-r { animation: figHammer 1.64s ease-in infinite; transform-box: fill-box; }
+@keyframes figHammer { 0%, 45% { transform: rotate(-21deg); } 55% { transform: rotate(7deg); } 100% { transform: rotate(-21deg); } }
 .spark { opacity: 0; }
 .pin[data-activity="repairing"] .spark,
-.pin[data-activity="building"] .spark { animation: figSpark .82s ease-out infinite; }
+.pin[data-activity="building"] .spark { animation: figSpark 1.64s ease-out infinite; }
 @keyframes figSpark { 0%, 50% { opacity: 0; } 56% { opacity: 1; } 70% { opacity: 0; } 100% { opacity: 0; } }
 
 /* foraging — a bend at the waist */
-.pin[data-activity="foraging"] .fig-body { animation: figBend 1.6s ease-in-out infinite; transform-origin: 0px -6px; }
-@keyframes figBend { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(8deg); } }
+.pin[data-activity="foraging"] .fig-body { animation: figBend 3.2s ease-in-out infinite; transform-origin: 0px -6px; }
+@keyframes figBend { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(6deg); } }
 
 /* swimming — half-submerged, ripples spreading */
 .pin[data-activity="swimming"] .fig-leg { opacity: .35; }
 .pin[data-activity="swimming"] .fig-body { transform: translateY(6px); }
 .ripple { opacity: 0; transform-box: fill-box; transform-origin: center; }
-.pin[data-activity="swimming"] .ripple-1 { animation: figRipple 2.4s ease-out infinite; }
-.pin[data-activity="swimming"] .ripple-2 { animation: figRipple 2.4s ease-out 1.2s infinite; }
-@keyframes figRipple { 0% { opacity: .5; transform: scale(.4); } 100% { opacity: 0; transform: scale(1.6); } }
+.pin[data-activity="swimming"] .ripple-1 { animation: figRipple 4.8s ease-out infinite; }
+.pin[data-activity="swimming"] .ripple-2 { animation: figRipple 4.8s ease-out 2.4s infinite; }
+@keyframes figRipple { 0% { opacity: .5; transform: scale(.4); } 100% { opacity: 0; transform: scale(1.35); } }
 
 /* radio — wave arcs pulse outward */
 .radio-wave { opacity: 0; }
-.pin[data-activity="radio"] .radio-wave.w1 { animation: figWave 1.6s ease-out infinite; }
-.pin[data-activity="radio"] .radio-wave.w2 { animation: figWave 1.6s ease-out .4s infinite; }
+.pin[data-activity="radio"] .radio-wave.w1 { animation: figWave 3.2s ease-out infinite; }
+.pin[data-activity="radio"] .radio-wave.w2 { animation: figWave 3.2s ease-out .8s infinite; }
 @keyframes figWave { 0% { opacity: .8; } 100% { opacity: 0; } }
 
 /* exploring — a slow scanning tilt */
-.pin[data-activity="exploring"] .fig-arm-r { animation: figScan 2.2s ease-in-out infinite; }
-@keyframes figScan { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(-30deg); } }
+.pin[data-activity="exploring"] .fig-arm-r { animation: figScan 4.4s ease-in-out infinite; }
+@keyframes figScan { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(-21deg); } }
 
 @media (prefers-reduced-motion: reduce) {
   .pin-bob, .rain-drop, .fog-blob, .wave-drift, .chimney-smoke, .lamp-glow,
@@ -506,13 +521,19 @@ body.v-map {
 /* Below ~680px the wordmark+clock chip and the 5-icon cluster no longer fit
    side by side (measured: ~180px + ~250px > a 390px phone) — found live at
    360-414px, where "Living Core" ran straight under the icon row. The icon
-   cluster drops BELOW the wordmark+clock stack instead of shrinking icons
-   past a 44px tap target (RULE 6/tap-target floor). 96px clears two stacked
-   chips (wordmark ~40px + clock chip ~32-40px + the gap between them) with
-   a small margin on every phone width tested (360-430px). */
+   cluster drops BELOW the whole `.hud-tl` stack instead of shrinking icons
+   past a 44px tap target (RULE 6/tap-target floor). 226px clears FOUR
+   stacked chips now (wordmark ~40px + clock ~40px + the two "now" chips at
+   44px each, plus the stack's own gaps) — found live 2026-09-26 when the
+   "now" chips (subtitles rewrite) were added: the icon row at the old 96px
+   sat directly on top of "Kevin — ...", since a two-chip stack had grown
+   to four. Re-measure `#now-chip-jenny`'s `bottom` if `.hud-tl` ever grows
+   another row — every "now" chip is a fixed 44px (min-height, single-line,
+   `text-overflow:ellipsis`), so the stack's total height doesn't depend on
+   agent name/place/activity/state text length. */
 @media (max-width: 680px) {
   .hud-tl, .hud-tr { max-width: calc(100vw - 28px); }
-  .hud-tr { top: 96px; }
+  .hud-tr { top: 226px; }
 }
 .hud-br { bottom: 14px; right: 14px; flex-direction: column; }
 .hud-bl { bottom: 14px; left: 14px; }
@@ -735,6 +756,11 @@ dialog.card-dialog:target {
 .char-dialog.jenny .char-name { color: var(--jenny); }
 .offline-note { font-size: 12.5px; color: var(--gold); background: var(--gold-bg); border-radius: var(--radius-sm); padding: 8px 10px; }
 
+/* ── "how to watch" first-visit card ── */
+.howto-legend { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 8px; }
+.howto-legend li { font-size: 13.5px; color: var(--ink-dim); display: flex; align-items: baseline; gap: 8px; }
+.howto-legend li span { font-size: 16px; flex-shrink: 0; }
+
 .gauges-card { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 0; }
 
 /* ── bottle dialog ── */
@@ -787,64 +813,176 @@ body.v-sheet { min-height: 100vh; min-height: 100dvh; }
 .gauge .fill { height: 100%; border-radius: 3px; }
 .supply-count { font-variant-numeric: tabular-nums; }
 
-/* ── bubble layer — HTML, positioned by script.js from the map's own
-   coordinate transform (viewport-absolute pixels, unaffected by pan/zoom
-   maths living elsewhere). ── */
-.bubble-layer { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
-.map-bubble {
+/* ── badge layer — a small round icon (💬/💭/✋) over whoever's turn is
+   currently narrated in the caption card below. HTML, positioned by
+   script.js from the map's own coordinate transform (viewport-absolute
+   pixels, unaffected by pan/zoom maths living elsewhere) — replaces the old
+   floating say/thought/do text bubbles, which are gone: the readable text
+   now lives in ONE place, the caption card. Purely decorative (aria-hidden;
+   the caption card itself is the aria-live text). ── */
+.badge-layer { position: fixed; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; }
+.map-badge {
   position: absolute;
-  max-width: min(70vw, 280px);
-  min-width: 60px;
-  font-size: 14px;
-  line-height: 1.4;
-  padding: 8px 11px;
-  border-radius: 12px;
-  background: #fffdf6;
-  color: #241f14;
-  box-shadow: 0 4px 16px rgba(0,0,0,.28);
   transform: translate(-50%, -100%);
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 50%;
+  background: rgba(23, 18, 8, .82);
+  border: 1px solid rgba(255,253,246,.42);
+  box-shadow: 0 2px 8px rgba(0,0,0,.28);
   opacity: 0;
-  transition: opacity .35s ease;
+  transition: opacity .3s ease;
 }
-.map-bubble.visible { opacity: 1; }
-/* Phones: at 390px one long thought covered the entire island. Smaller type and
-   width here; script.js also clips the text at a word boundary (the full turn
-   is always in the live panel). */
+.map-badge.visible { opacity: 1; animation: badgePulse 2.6s ease-in-out infinite; }
+@keyframes badgePulse {
+  0%, 100% { transform: translate(-50%, -100%) scale(1); }
+  50% { transform: translate(-50%, -100%) scale(1.1); }
+}
 @media (max-width: 680px) {
-  .map-bubble { max-width: 58vw; font-size: 12.5px; line-height: 1.35; padding: 6px 9px; border-radius: 10px; }
+  .map-badge { width: 25px; height: 25px; font-size: 12.5px; }
 }
-.map-bubble::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  transform: translateX(-50%);
-  border: 7px solid transparent;
-  border-top-color: #fffdf6;
+
+/* The glow ring drawn ON the figure itself (island-map.tsx's Figure(), a
+   `.fig-active-ring` always in the markup) — script.js sets `data-active` on
+   the `.pin` for exactly as long as this figure is the one showing in the
+   caption card. Same "attribute, not a re-render" convention as every pose
+   below. */
+.fig-active-ring { opacity: 0; transform-box: fill-box; transform-origin: center; transition: opacity .3s ease; }
+.pin[data-active] .fig-active-ring { opacity: .55; animation: figActivePulse 2.6s ease-in-out infinite; }
+@keyframes figActivePulse {
+  0%, 100% { opacity: .4; transform: scale(1); }
+  50% { opacity: .8; transform: scale(1.1); }
 }
-.map-bubble.flip-left { transform: translate(-88%, -100%); }
-.map-bubble.flip-left::after { left: 88%; }
-.map-bubble.flip-right { transform: translate(-12%, -100%); }
-.map-bubble.flip-right::after { left: 12%; }
-.map-bubble.thought {
-  background: rgba(255,253,246,.94);
-  border: 1px dashed var(--border);
-  font-style: italic;
-  color: var(--ink-dim);
-}
-.map-bubble.thought::after { border-top-color: rgba(255,253,246,.94); }
-.map-bubble.do-caption {
-  background: rgba(23, 18, 8, 0.72);
+
+/* ── the caption card ("subtitles") — ONE card, the current turn, replacing
+   the old floating map bubbles (owner: "the text messages coming out of
+   their brain are not easy to read at all"). Dark translucent, same palette
+   as `.island-panel` (already checked >= 4.5:1 against the brightest midday
+   sky). Desktop: bottom-left, clear of the right-docked scene panel AND the
+   zoom cluster (script.js measures both — see updateCaptionLayout() — so a
+   hardcoded pixel budget here can never drift out of sync with their real
+   CSS). Phones: full width minus 16px gutters, docked above the bottom
+   sheet's icon row. ── */
+.caption-card {
+  position: fixed;
+  z-index: 13;
+  left: 16px;
+  bottom: 76px;
+  max-width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: rgba(20, 16, 10, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,253,246,.14);
+  border-radius: var(--radius);
+  box-shadow: 0 -4px 20px rgba(0,0,0,.3);
+  padding: 12px 14px;
   color: #fffdf6;
-  font-size: 12px;
-  font-style: italic;
-  font-weight: 600;
-  padding: 5px 10px;
-  box-shadow: none;
-  transform: translate(-50%, 6px);
 }
-.map-bubble.do-caption::after { display: none; }
-.island-root.thoughts-off .map-bubble.thought { display: none; }
+.caption-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0; margin-bottom: 6px; }
+.caption-dot { width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; flex-shrink: 0; align-self: center; }
+.caption-card[data-speaker="kevin"] .caption-dot { background: var(--kevin); }
+.caption-card[data-speaker="jenny"] .caption-dot { background: var(--jenny); }
+.caption-name { font-weight: 800; font-size: 13.5px; }
+.caption-card[data-speaker="kevin"] .caption-name { color: var(--kevin); }
+.caption-card[data-speaker="jenny"] .caption-name { color: var(--jenny); }
+.caption-meta { font-size: 12px; color: rgba(255,253,246,.65); }
+
+.caption-body { display: grid; gap: 8px; }
+.caption-row {
+  display: grid;
+  grid-template-columns: 18px 46px 1fr;
+  gap: 6px;
+  align-items: baseline;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .5s ease, transform .5s ease;
+}
+.caption-row.caption-in { opacity: 1; transform: translateY(0); }
+.caption-icon { font-size: 13px; line-height: 1.5; }
+.caption-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: rgba(255,253,246,.55);
+  line-height: 1.5;
+}
+.caption-text { margin: 0; line-height: 1.5; }
+.caption-row-thought .caption-text { font-style: italic; color: rgba(255,253,246,.72); font-size: 15px; }
+.caption-row-say .caption-text { font-size: 18px; font-weight: 600; }
+.caption-row-say .caption-text::before { content: '\201C'; }
+.caption-row-say .caption-text::after { content: '\201D'; }
+.caption-row-do .caption-text { font-size: 15px; color: rgba(255,253,246,.82); }
+@media (max-width: 680px) {
+  .caption-row-say .caption-text { font-size: 16px; }
+  .caption-row-thought .caption-text, .caption-row-do .caption-text { font-size: 14px; }
+}
+/* Long text (a pre-island-2 thought can run to ~500 characters): clamp to
+   ~4 lines, with a "more" toggle (script.js) that only appears when the
+   text actually overflows — added as an enhancement, never present without
+   JS, so a no-JS visitor always gets the full text. */
+.caption-text.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.caption-text.clamped.expanded { -webkit-line-clamp: unset; overflow: visible; }
+.caption-more {
+  display: inline-block;
+  margin-top: 2px;
+  background: none;
+  border: none;
+  color: rgba(255,253,246,.7);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 2px;
+  min-height: 30px;
+}
+.caption-more:hover { color: #fffdf6; }
+
+@media (max-width: 1023px) {
+  .caption-card {
+    left: 16px;
+    right: 16px;
+    max-width: none;
+    /* 160px clears BOTH the collapsed sheet (~94px) and the hud-bl/hud-br
+       icon row docked at bottom:108px (see the HUD rules above) — a static
+       value on purpose, see initPanel()'s expanded-state toggle in
+       script.js for why no per-frame measurement is needed here. */
+    bottom: 160px;
+    max-height: 42vh;
+  }
+  .caption-card.panel-expanded { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caption-row { transition: none !important; opacity: 1 !important; transform: none !important; }
+  .map-badge.visible { animation: none !important; }
+  .fig-active-ring { animation: none !important; }
+}
+
+/* ── "now" chips — top-left, under the clock chip: place/activity/state at
+   a glance for each agent, live-updated from /api/poll (script.js). ── */
+.now-chip { min-height: 44px; margin-top: 2px; max-width: 100%; }
+.now-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; flex-shrink: 0; }
+.now-text {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── scene card ── */
 .scene-card {
@@ -906,9 +1044,6 @@ body.v-sheet { min-height: 100vh; min-height: 100dvh; }
 .presence-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: presencePulse 1.4s ease-in-out infinite; }
 @keyframes presencePulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
 
-.typewriter-caret { display: inline-block; width: 2px; height: 1em; background: currentColor; vertical-align: -0.15em; animation: caretBlink .9s step-end infinite; }
-@keyframes caretBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-
 .thoughts-toggle { font-size: 11.5px; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; min-height: 30px; cursor: pointer; }
 .thoughts-toggle:hover { color: var(--ink); border-color: var(--muted); }
 
@@ -925,6 +1060,10 @@ body.v-sheet { min-height: 100vh; min-height: 100dvh; }
 .bar-row .track > span { display: block; height: 100%; border-radius: 3px; transition: width .6s ease; }
 .skills-line { font-size: 11.5px; color: var(--ink-dim); margin-top: 6px; }
 .char-plan { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.char-plan-list { margin-top: 8px; }
+.char-plan-list h3 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 4px; }
+.char-plan-list ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--ink-dim); }
+.char-plan-list li { margin-bottom: 3px; }
 .char-made { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
 
 /* ── timeline ── */
@@ -1056,4 +1195,10 @@ body.v-sheet { min-height: 100vh; min-height: 100dvh; }
 @media (max-width: 480px) {
   .wrap { padding: 0 14px; }
   h1 { font-size: 1.4rem; }
+}
+
+/* Phones zoom with a pinch; the +/- buttons sat on top of the caption card's
+   right edge at 390px (seen 2026-09-26). Keep only "fit island" there. */
+@media (max-width: 680px) {
+  #zoom-in, #zoom-out { display: none; }
 }

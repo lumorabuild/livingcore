@@ -25,7 +25,14 @@ import { BIOGRAPHIES, ISLAND_NAME, LOCATIONS, SHARED_STORY, skillLevel } from '.
 import { barometerLine, tide } from './sim';
 
 /** Written on every island-era turn, scene and chapter. Bump when any template below changes. */
-export const PROTOCOL = 'island-1';
+/*
+  island-2 (2026-09-26): THOUGHT asked to be "a sentence or two". island-1
+  thoughts ran to ~500 characters — full inner monologues, pages long on a
+  phone — and the owner, watching live, could not follow "what's happening in
+  their brain". A person's passing thought is short; the long version is what
+  the private journal and the nightly reflection are for.
+*/
+export const PROTOCOL = 'island-2';
 
 export const SLOT_WORDS: Record<Slot, string> = {
   dawn: 'dawn', morning: 'morning', midday: 'midday', afternoon: 'afternoon', evening: 'evening', night: 'night',
@@ -136,7 +143,7 @@ export function agentSystemPrompt(ctx: AgentContext): string {
     SHARED_STORY,
     `This is your real life, happening now. Nothing is scripted and nobody is directing you. You have a body that gets tired and hungry, skills you are good and bad at, the tools and materials of the island, and time that keeps moving. You can say anything, and you can do anything a person could physically try here — work, explore, build, repair, fish, cook, forage, study, make things, rest, go somewhere, argue, joke, keep a secret, change your mind. What you do has real consequences: the island answers, and things can fail.`,
     `HOW YOU EXIST HERE
-- THOUGHT is only in your head. ${bio.partner} never hears it.
+- THOUGHT is only in your head — what goes through it right now, a sentence or two. ${bio.partner} never hears it.
 - SAY is what you actually say out loud. People talk in short turns, not speeches. SAY can be empty if you say nothing.
 - DO is what your body does right now, in a few words. To go somewhere, do it ("walk up to the spring"). To make something that can be kept — a poem, a song, a sketch, a map, a recipe, a letter, a plan, a design — write "make <kind>: <title>" in DO and it will really be made.
 - To keep something in memory for good, write [remember: …] anywhere.

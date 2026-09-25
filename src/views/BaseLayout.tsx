@@ -27,7 +27,7 @@ import { SheetChrome, SheetBackdrop, CreditLine, type Tint } from './chrome';
 
 // Bump when app.css/script.js change — the only reason this exists is a cache
 // buster on the two static assets, so a deploy is visible immediately.
-const ASSET_VERSION = 'island3';
+const ASSET_VERSION = 'island4';
 
 interface BaseLayoutProps {
   title: string;

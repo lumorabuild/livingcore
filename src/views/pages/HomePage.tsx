@@ -24,14 +24,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { BaseLayout } from '../BaseLayout';
-import { IslandMap, OceanShimmer, locationCoordsJson, walkGraphJson, locationInfoJson, buildLocationInfo } from '../island-map';
+import { IslandMap, OceanShimmer, locationCoordsJson, walkGraphJson, locationInfoJson, buildLocationInfo, type LocationInfoEntry } from '../island-map';
 import { faceFor } from '../agent-faces';
 import { TurnBody, splitApartTurns, isRealSay, isRealAction } from '../turn';
 import { safeJson } from '../safe-json';
 import { MENU_LINKS, DATASET_LINKS, CreditLine } from '../chrome';
 import type { AgentId, World, SceneRow, WorldEventRow, ChapterRow, ArtifactRow, NotebookRow } from '../../world/types';
 import { BIOGRAPHIES, LOCATIONS, skillLevel } from '../../world/bio';
-import { publicWorld, type PublicWorld } from '../../world/tick';
+import { publicWorld, type PublicWorld, type PublicAgent } from '../../world/tick';
 import { energyWords, hungerWords, moodWords } from '../../world/prompts';
 import {
   loadWorld, getLastTurnAt, getSceneTurns, getTodayTimeline, getLatestChapter,
@@ -159,20 +159,16 @@ export function HomePage({ data }: { data: HomePageData }) {
   );
 }
 
-/** Each agent's own most recent turn (if any), for the map's instant-on-load
- *  bubble — "show the current state, don't replay history" (SPEC2 §B, still
- *  true under SPEC3). Walking backwards through an already-ascending list to
- *  grab the last one per speaker, so a scene where Kevin has spoken 5 times
- *  and Jenny once still gets exactly one bubble each, not a flood. */
-function latestTurnsJson(turns: SceneTurnRow[]): string {
-  const out: Partial<Record<AgentId, { id: number; speaker: AgentId; say: string; thought: string; do: string; activity: string; location: string; created_at: string }>> = {};
-  for (let i = turns.length - 1; i >= 0 && (!out.kevin || !out.jenny); i--) {
-    const t = turns[i];
-    if (!out[t.speaker]) {
-      out[t.speaker] = { id: t.id, speaker: t.speaker, say: t.say, thought: t.thought, do: t.action, activity: t.activity, location: t.location, created_at: t.created_at };
-    }
-  }
-  return safeJson(out);
+/** The single word a "now" chip / caption header shows for how someone's
+ *  doing — energy when it's notably low (that's the more operationally
+ *  useful thing to know: he's tired), mood otherwise. Reuses
+ *  energyWords/moodWords (src/world/prompts.ts) so the words are exactly the
+ *  ones the agent's own system prompt reads — never a third vocabulary.
+ *  MIRRORED in public/script.js (same threshold, same fallback order) so the
+ *  HUD chips can update live from /api/poll's world.agents without a
+ *  round trip through the server. */
+function nowWord(a: { energy: number; mood: number }): string {
+  return a.energy < 55 ? energyWords(a.energy) : moodWords(a.mood);
 }
 
 function EmptyIsland() {
@@ -221,7 +217,6 @@ function IslandRoot({ data, world, pub }: { data: HomePageData; world: World; pu
     <div class="island-root" data-poll-root data-latest-turn-id={latestId} data-slot={pub.slot} data-weather={pub.weather.kind}>
       <script id="__LOCATIONS__" type="application/json" dangerouslySetInnerHTML={{ __html: locationCoordsJson() }}></script>
       <script id="__WALKGRAPH__" type="application/json" dangerouslySetInnerHTML={{ __html: walkGraphJson() }}></script>
-      <script id="__LATEST_TURNS__" type="application/json" dangerouslySetInnerHTML={{ __html: latestTurnsJson(turns) }}></script>
       <script id="__LOCINFO__" type="application/json" dangerouslySetInnerHTML={{ __html: safeJson(locInfo) }}></script>
 
       {/* THE OCEAN: a fixed, full-viewport layer BEHIND the pan/zoom stage
@@ -243,10 +238,26 @@ function IslandRoot({ data, world, pub }: { data: HomePageData; world: World; pu
         </div>
       </div>
 
-      {/* Bubbles are an HTML overlay, positioned every frame from the SVG's
-          own live transform (script.js's mapToPixel) — `position:fixed`
-          so pan/zoom on `.map-stage` never has to be mirrored here. */}
-      <div class="bubble-layer" id="bubble-layer" aria-live="polite"></div>
+      {/* The badge layer — a small round icon over whoever's turn is
+          currently narrated in the caption card below, plus (island-map.tsx's
+          Figure()) a soft glow ring drawn ON the figure itself. Positioned
+          every frame from the SVG's own live transform (script.js's
+          mapToPixel), same as the old text bubbles this replaced —
+          `position:fixed` so pan/zoom on `.map-stage` never has to be
+          mirrored here. Purely decorative (the real, readable text is the
+          caption card's aria-live region) so nothing here needs aria-live. */}
+      <div class="badge-layer" id="badge-layer" aria-hidden="true"></div>
+
+      {/* THE CAPTION CARD ("subtitles") — replaces the old floating say/
+          thought/do text bubbles that used to hang over the map (owner: "the
+          text messages coming out of their brain are not easy to read at
+          all"). ONE card, always the CURRENT turn, server-rendered here with
+          whatever the live scene's own last turn already is (never a second
+          source of truth — same `turns` SceneCard below reads), then kept
+          current by script.js's turn director as new turns arrive over the
+          poll. See public/script.js's "CAPTION CARD" section for the reveal
+          timing / pacing rules. */}
+      <CaptionCard pub={pub} turns={turns} locInfo={locInfo} />
 
       {minutesSilent !== null && minutesSilent > 20 && (
         <div class="quiet-chip" id="quiet-chip" role="status">
@@ -260,11 +271,18 @@ function IslandRoot({ data, world, pub }: { data: HomePageData; world: World; pu
           <h1>Living Core <span class="wordmark-sub">· Sorrel Island</span></h1>
         </div>
         <a href="#weather-dialog" class="hud-chip hud-clock" data-open-dialog="weather-dialog" id="hero-status">{statusLine}</a>
+        {/* "What's going on at a glance" (owner: "I didn't understand what
+            exactly is happening in Kevin and Jenny's brain") — a compact,
+            always-on readout of each agent's place/activity/state, updated
+            live in script.js from /api/poll's world.agents. Tapping one opens
+            their character card, same door the map figure's own click uses. */}
+        <NowChip id="kevin" a={pub.agents.kevin} locInfo={locInfo} />
+        <NowChip id="jenny" a={pub.agents.jenny} locInfo={locInfo} />
       </div>
 
       <div class="hud hud-tr">
         <a href="#today-dialog" class="icon-btn" data-open-dialog="today-dialog" aria-label="Today so far"><span aria-hidden="true">📅</span></a>
-        <button type="button" class="icon-btn" id="map-thoughts-toggle" aria-pressed="true" aria-label="Show thought bubbles"><span aria-hidden="true">💭</span></button>
+        <button type="button" class="icon-btn" id="map-thoughts-toggle" aria-pressed="true" aria-label="Show their private thoughts"><span aria-hidden="true">💭</span></button>
         <button type="button" class="icon-btn" id="follow-toggle" aria-pressed="false" aria-label="Follow whoever's speaking"><span aria-hidden="true">🎯</span></button>
         <a href="#info-dialog" class="icon-btn" data-open-dialog="info-dialog" aria-label="About this experiment"><span aria-hidden="true">ℹ️</span></a>
         <a href="#menu-dialog" class="icon-btn hud-menu-btn" data-open-dialog="menu-dialog" aria-label="Menu"><span aria-hidden="true">☰</span> <span class="menu-btn-label">Menu</span></a>
@@ -316,6 +334,7 @@ function IslandRoot({ data, world, pub }: { data: HomePageData; world: World; pu
       <CharacterDialog id="jenny" world={world} latestArtifact={data.latestMadeByAgent.jenny} forecast={data.forecastJenny} />
       <LandmarkDialog />
       <BottleDialog answered={data.answeredBottles} />
+      <HowToDialog />
     </div>
   );
 }
@@ -390,8 +409,34 @@ function InfoDialog({ minutesSilent }: { minutesSilent: number | null }) {
       {minutesSilent !== null && minutesSilent > 20 && (
         <p class="offline-note"><strong>The island is quiet.</strong> The free AI Kevin and Jenny think with is unavailable right now. They'll pick up where they left off.</p>
       )}
+      <p><a href="#howto-dialog" data-open-dialog="howto-dialog">How to watch →</a></p>
       <p><a href="/about">Read the full explanation →</a></p>
       <CreditLine />
+    </dialog>
+  );
+}
+
+/** First-visit "how to read this" card (owner: "I didn't understand what
+ *  exactly is happening in Kevin and Jenny's brain"). Shown once automatically
+ *  (public/script.js, localStorage 'lc_seen_howto', wrapped in try/catch —
+ *  a visitor with storage blocked just sees it every visit, never a crash),
+ *  and always reachable again from the ℹ️ info card above. A real `<dialog>`
+ *  like every other card here, so Esc/backdrop-click/focus handling is the
+ *  same native behaviour the rest of the app already gets for free. */
+function HowToDialog() {
+  return (
+    <dialog id="howto-dialog" class="card-dialog" aria-labelledby="howto-dialog-title">
+      <div class="dialog-head">
+        <h2 id="howto-dialog-title">How to watch</h2>
+        <a href="#" class="dialog-close" data-dialog-close aria-label="Close">✕</a>
+      </div>
+      <p>Kevin and Jenny are two AI minds living on this island.</p>
+      <ul class="howto-legend">
+        <li><span aria-hidden="true">💭</span> is what they privately think — the other can't hear it.</li>
+        <li><span aria-hidden="true">💬</span> is what they say.</li>
+        <li><span aria-hidden="true">✋</span> is what they do.</li>
+      </ul>
+      <p class="muted">The island itself — weather, tides, food, luck — is code. Drag to explore, tap a person or a place.</p>
     </dialog>
   );
 }
@@ -424,6 +469,100 @@ function ResGauge({ label, value, max, unit }: { label: string; value: number; m
       <span class="bar"><span class="fill" style={`width:${pct}%;background:${color};`}></span></span>
       {Math.round(value * 10) / 10}{unit}
     </span>
+  );
+}
+
+// ── Caption card ("subtitles") + "now" chips ──
+//
+// Owner, watching live: "I didn't understand what exactly is happening in
+// Kevin and Jenny's brain; also everything is moving so fast... the text
+// messages coming out of their brain are not easy to read at all." This
+// replaces the old floating say/thought/do bubbles that used to hang over
+// the map with ONE labelled card, always the CURRENT turn — never more than
+// one on screen, never auto-fading, held long enough to actually read.
+// public/script.js's turn director keeps this current as new turns arrive
+// (staged reveal, reading-time-based hold, one turn at a time across BOTH
+// agents); this only has to render whatever is ALREADY true right now, from
+// the exact same `turns` SceneCard reads below — never a second source of
+// truth, and exactly what a no-JS visitor (or the first paint, before
+// script.js runs) sees.
+
+/** Up to three (icon, label, text) rows for a turn — thought (private,
+ *  skipped when there's nothing real to show), say, then do, in that
+ *  order (reveal order too — see public/script.js). Mirrors turn.tsx's
+ *  isRealSay/isRealAction; thought has no placeholder vocabulary of its own
+ *  (matches how TurnRow/addBubble already treated it — a plain truthy
+ *  check), so a model that never writes one just omits the row. */
+function captionRows(say: string, thought: string, doText: string): { kind: 'thought' | 'say' | 'do'; icon: string; label: string; text: string }[] {
+  const rows: { kind: 'thought' | 'say' | 'do'; icon: string; label: string; text: string }[] = [];
+  if (thought) rows.push({ kind: 'thought', icon: '💭', label: 'Thinks', text: thought });
+  if (isRealSay(say)) rows.push({ kind: 'say', icon: '💬', label: 'Says', text: say });
+  if (isRealAction(doText)) rows.push({ kind: 'do', icon: '✋', label: 'Does', text: doText });
+  return rows;
+}
+
+function CaptionCard({ pub, turns, locInfo }: { pub: PublicWorld; turns: SceneTurnRow[]; locInfo: Record<string, LocationInfoEntry> }) {
+  const last = turns.length ? turns[turns.length - 1] : null;
+  const rows = last ? captionRows(last.say, last.thought, last.action) : [];
+  const sceneMode = pub.scene?.mode || 'together';
+  const isApart = sceneMode === 'apart';
+  const loc = last ? locInfo[last.location] : null;
+  return (
+    <>
+      {/* The ONE turn this card shows right now, in the SAME shape
+          public/script.js's own turn director already works with (`do`,
+          not `action` — the /api/poll wire shape). script.js reads this
+          once at load and re-renders through its OWN showCaption() — never
+          a second, JS-only copy of "how a caption looks" — so the markup
+          below only has to be right for a no-JS visitor and for the instant
+          before script.js runs. */}
+      {last && (
+        <script id="__LATEST_TURN__" type="application/json" dangerouslySetInnerHTML={{ __html: safeJson({
+          id: last.id, speaker: last.speaker, say: last.say, thought: last.thought, do: last.action,
+          activity: last.activity, location: last.location, mode: sceneMode,
+        }) }}></script>
+      )}
+      <div class="caption-card" id="caption-card" role="status" aria-live="polite" data-speaker={last ? last.speaker : ''} hidden={!last || rows.length === 0}>
+        {last && (
+          <>
+            <div class="caption-head">
+              <span class="caption-dot" aria-hidden="true"></span>
+              <span class="caption-name">{BIOGRAPHIES[last.speaker].name}</span>
+              <span class="caption-meta">
+                {loc ? ` — at ${loc.name}` : ''}{last.activity ? ` · ${last.activity}` : ''}{isApart ? ' · alone' : ''}
+              </span>
+            </div>
+            <div class="caption-body">
+              {rows.map((r) => (
+                <div class={`caption-row caption-row-${r.kind} caption-in`} key={r.kind}>
+                  <span class="caption-icon" aria-hidden="true">{r.icon}</span>
+                  <span class="caption-label">{r.label}</span>
+                  <div class="caption-text-wrap"><p class="caption-text">{r.text}</p></div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** A compact "what's happening right now" readout for one agent, under the
+ *  clock chip — the "at a glance" half of the owner's complaint. Tapping it
+ *  opens the same character card the map figure's own click does.
+ *  `nowWord` (above) picks energy over mood only when energy is notably
+ *  low (< 55 — "a little tired" or worse); mirrored in script.js so this
+ *  stays live across a poll without a page reload. */
+function NowChip({ id, a, locInfo }: { id: AgentId; a: PublicAgent; locInfo: Record<string, LocationInfoEntry> }) {
+  const bio = BIOGRAPHIES[id];
+  const loc = locInfo[a.location];
+  return (
+    <a href={`#character-${id}`} class="hud-chip now-chip" data-open-dialog={`character-${id}`} id={`now-chip-${id}`} data-agent={id}
+      aria-label={`${bio.name} — at ${loc ? loc.name : a.location}, ${a.activity}, ${nowWord(a)}. Open their character card`}>
+      <span class="now-dot" style={`background:var(--${id});`} aria-hidden="true"></span>
+      <span class="now-text" id={`now-text-${id}`}>{bio.name} — {loc ? loc.short : a.location} · {a.activity} · {nowWord(a)}</span>
+    </a>
   );
 }
 
@@ -561,7 +700,20 @@ function CharacterDialog({ id, world, latestArtifact, forecast }: { id: AgentId;
       <div class="skills-line">
         {topSkills.length ? topSkills.map((s) => `${s.skill.replace('_', ' ')} ${s.level}/10`).join(' · ') : 'no notable skills yet'}
       </div>
-      <div class="char-plan">{hasPlan ? 'Has a plan for today.' : 'No plan written yet today.'}</div>
+      {/* Plans for today (owner: "I didn't understand what exactly is
+          happening in Kevin and Jenny's brain") — a.plan is on the full
+          World, private and deliberately excluded from PublicAgent/
+          PublicWorld (world/tick.ts's own comment), so this only ever reads
+          off the server-rendered `world` this dialog already gets, never
+          the live poll — a fresh page load is what keeps it current. */}
+      {hasPlan ? (
+        <div class="char-plan-list">
+          <h3>Plans for today</h3>
+          <ul>{a.plan.map((p, i) => <li key={i}>{p}</li>)}</ul>
+        </div>
+      ) : (
+        <div class="char-plan">No plan written yet today.</div>
+      )}
       {forecast.n > 0 && <div class="char-plan">Weather calls: {forecast.correct}/{forecast.n} right this week</div>}
       {latestArtifact && (
         <div class="char-made">Latest made: <a href={`/made/${latestArtifact.id}`}>{latestArtifact.title}</a></div>

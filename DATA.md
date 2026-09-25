@@ -193,7 +193,7 @@ GET /api/export/meta.json
 Rewritten for the island era. Includes:
 
 - `eras` — the full timeline (`src/world/eras.ts`), from the scripted template era through the two talking-era model pairs, the documented monoculture collapse, the silent gap, to the current island era.
-- `protocol` — the current prompt-template version (`island-1`); bumps whenever a template changes, and every island-era turn carries the protocol it was produced under (`dialogue.jsonl`'s `protocol` field).
+- `protocol` — the current prompt-template version (`island-2` since 2026-09-26, when THOUGHT was asked to be "a sentence or two"; `island-1` before, whose thoughts averaged ~500 characters); bumps whenever a template changes, and every island-era turn carries the protocol it was produced under (`dialogue.jsonl`'s `protocol` field).
 - `prompts` — **every prompt template, rendered once against a sample world** so you see real text, not a description: the agent's system prompt, the scene opening, the morning plan prompt, the narrator's system prompt and its transition prompt, the morning-setup prompt, the reflection prompt, the chapter system prompt and user prompt, and the "make something" prompt. Values inside the rendered samples that are placeholders (a journal excerpt, a memory) are written in parentheses so they're unambiguous — the *template structure and every fixed sentence* around them is exact.
 - `chains` / `agents` — the four model chains (`kevin`, `jenny`, `narrator`, `chapter`) as ordered lists of model ids.
 - `inference.registry` — the full probed NVIDIA model registry (`src/core/nvidia.ts`), including retired/unavailable models and why, and `inference.dead_model_memory` explaining the 12-hour skip rule.
@@ -257,7 +257,7 @@ Known caveats, honestly stated:
   transition-prompt sample — never narrated to the agents as a die roll, only
   as what happened.
 - **Every island-era turn, scene and chapter carries a protocol stamp**
-  (`island-1` today). If a prompt template changes, the protocol bumps and a
+  (`island-2` today). If a prompt template changes, the protocol bumps and a
   new `era` entry is added — never a silent edit to what an old stamp means.
 - **There are gaps in the timeline** — the agents live only when the cron
   runs: no turns 2026-06-29 → 07-09 (cron disabled), 2026-07-15 → 07-17 (both

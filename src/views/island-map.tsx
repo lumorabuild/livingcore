@@ -163,6 +163,13 @@ export function locationCoordsJson(): string {
 // one lookup table cannot.
 export interface LocationInfoEntry {
   name: string;
+  /** A short, compact form of `name` (SHORT_LABEL/SHORT_LABEL_OVERRIDE, above)
+   *  — e.g. "the dock" rather than LOCATIONS' full "the dock" already-short
+   *  name, or "the cottage" rather than "the keeper's cottage". Added for the
+   *  HUD "now" chips and the map caption card (HomePage.tsx), which both need
+   *  a terse place word and must agree with each other and with
+   *  public/script.js's own copy of it (LOCINFO ships this same field). */
+  short: string;
   /** What a visitor sees there right now — LOCATIONS' own description for a
    *  plain spot, or "Kevin is here, fishing." for an occupied one. */
   blurb: string;
@@ -211,6 +218,7 @@ export function buildLocationInfo(world: PublicWorld): Record<string, LocationIn
     const door = DOOR[id];
     out[id] = {
       name: loc.name,
+      short: SHORT_LABEL[id] || loc.name,
       blurb: `${occupantLine(id, world)} ${loc.description}`.trim(),
       href: door?.href,
       hrefLabel: door?.hrefLabel,
@@ -220,7 +228,8 @@ export function buildLocationInfo(world: PublicWorld): Record<string, LocationIn
   // instead of live occupants (nobody visibly "stands" in a signpost).
   for (const key of ['workshop', 'signpost', 'chest', 'hilltop-open']) {
     const door = DOOR[key];
-    out[key] = { name: SHORT_LABEL_OVERRIDE[key] || key, blurb: STATIC_BLURB[key] || '', href: door?.href, hrefLabel: door?.hrefLabel };
+    const short = SHORT_LABEL_OVERRIDE[key] || key;
+    out[key] = { name: short, short, blurb: STATIC_BLURB[key] || '', href: door?.href, hrefLabel: door?.hrefLabel };
   }
   // The cottage and garden are also the way to the projects card (SPEC3);
   // the projects board itself lives in HomePage.tsx's own dialog markup, so
@@ -282,6 +291,15 @@ function Figure({ id }: { id: AgentId }) {
   const bio = BIOGRAPHIES[id];
   return (
     <g class="figure-parts">
+      {/* The "who's narrating right now" ring — subtitles rewrite (see
+          HomePage.tsx's caption card). script.js sets `data-active` on the
+          parent `.pin` for exactly as long as this figure's turn is the one
+          showing in the caption card; app.css's `.pin[data-active] .fig-active-ring`
+          fades it in and pulses it gently. Always in the markup (same "pose
+          via attribute, never re-render" rule as every prop below), fill:none
+          so it never eats a click, drawn BEFORE the body so it reads as a
+          ring around the figure rather than over it. */}
+      <circle class="fig-active-ring" cx="0" cy="-13" r="21" fill="none" stroke={bio.color} stroke-width="2" />
       <ellipse class="fig-shadow" cx="0" cy="1.5" rx="10" ry="2.6" fill="#0a0705" opacity="0.24" />
 
       {/* Zzz — shown only in place of the body when data-activity="sleeping" */}
@@ -829,7 +847,10 @@ export function OceanShimmer() {
     const x = rnd(rand() * 1600);
     const y = rnd(rand() * 1000);
     const w = rnd(26 + rand() * 34);
-    const dur = rnd(7 + rand() * 6);
+    // Calmer motion pass (owner: "movement... so fast"): durations ×1.5 —
+    // was 7-13s, now 10.5-19.5s. Opacity is toned down in app.css's own
+    // oceanShimmerDrift keyframes, not here (nothing here draws opacity).
+    const dur = rnd(10.5 + rand() * 9);
     const delay = rnd(rand() * 7);
     strokes.push(
       <path key={i} class="ocean-shimmer-stroke"
