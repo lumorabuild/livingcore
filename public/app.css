@@ -1202,3 +1202,22 @@ body.v-sheet { min-height: 100vh; min-height: 100dvh; }
 @media (max-width: 680px) {
   #zoom-in, #zoom-out { display: none; }
 }
+
+/* First-visit "How to watch" offer — a small chip, never a modal over the island. */
+.howto-hint {
+  position: fixed; z-index: 25; left: 50%; transform: translateX(-50%);
+  top: 16px; display: flex; align-items: center; gap: 2px;
+  background: rgba(10, 8, 5, 0.72); color: #fffdf6; border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  animation: howtoHintIn .5s ease-out both;
+}
+.howto-hint button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; min-height: 44px; }
+.howto-hint-open { padding: 0 6px 0 16px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.howto-hint-close { padding: 0 14px 0 6px; font-size: 20px; line-height: 1; opacity: .75; min-width: 44px; }
+.howto-hint-close:hover { opacity: 1; }
+@keyframes howtoHintIn { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* Phones: the top HUD is several rows deep there, so sit just above the caption card instead. */
+/* Phones: under the HUD icon row (top:226px + 44px, see .hud-tr) — clear of the caption card below. */
+@media (max-width: 680px) { .howto-hint { top: 282px; } }
+@media (prefers-reduced-motion: reduce) { .howto-hint { animation: none; } }

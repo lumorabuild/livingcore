@@ -251,10 +251,31 @@
     var seen = false;
     try { seen = localStorage.getItem(KEY) === '1'; } catch (e) {}
     function markSeen() { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+    /*
+      NOT an auto-opening modal. The first cut opened this dialog on every first
+      visit, which covered the whole island for a newcomer AND for every
+      crawler and audit (site-verify: "primary content covered by
+      ul.howto-legend" on the live site, 2026-09-26). A small chip offers it
+      instead; it goes away once the card has been opened or the chip dismissed.
+    */
     if (!seen) {
-      // A short delay so it doesn't fight the rest of DOMContentLoaded's
-      // init work (figures/pan-zoom/caption) for the very first paint.
-      setTimeout(function () { openDialog('howto-dialog'); markSeen(); }, 500);
+      var hint = document.createElement('div');
+      hint.className = 'howto-hint';
+      var open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'howto-hint-open';
+      open.textContent = '👋 New here? How to watch';
+      var close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'howto-hint-close';
+      close.setAttribute('aria-label', 'Dismiss');
+      close.textContent = '×';
+      hint.appendChild(open);
+      hint.appendChild(close);
+      document.body.appendChild(hint);
+      var dismiss = function () { markSeen(); if (hint.parentNode) hint.parentNode.removeChild(hint); };
+      open.addEventListener('click', function () { dismiss(); openDialog('howto-dialog'); });
+      close.addEventListener('click', dismiss);
     }
     dlg.addEventListener('close', markSeen);
   }
