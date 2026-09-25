@@ -1,16 +1,24 @@
-// Living Core — Main Worker Entry
+// Living Core — Main Worker Entry (Island Era)
 // Full SSR frontend + API backend. Kevin & Jenny think through the NVIDIA API
-// (OpenAI-compatible, free tier) — see src/core/nvidia.ts for the model registry.
+// (OpenAI-compatible, free tier) — see src/core/nvidia.ts for the model
+// registry and src/world/models.ts for the four island-era chains.
+//
+// The old talking-era engine (src/core/{kevin,jenny,loop,coherence,
+// thinking_rules,rss,dialogue,ai_dialogue}.ts) is deleted — see CLAUDE.md /
+// the island-era spec. Everything that used to run a fixed-turn conversation
+// loop here now runs src/world/tick.ts#runTick, which advances a simulated
+// world (src/world/sim.ts) one scene or one job at a time.
 
 import { Hono } from 'hono';
 import api from './routes/api';
+import exportsApp from './routes/exports';
 import { createViewRoutes } from './routes/views';
-import * as dialogueEngine from './core/dialogue';
-import * as rssEngine from './core/rss';
-import * as dialogueOps from './db/dialogue';
-import { noteAiError, AGENTS, buildInboxSeed } from './core/ai_dialogue';
 import { buildRobotsTxt, buildSitemapXml, FAVICON_SVG } from './core/seo';
+import { cleanupRateLimits } from './core/ratelimit';
 import { CACHE, cacheHeaders, seal } from './cache';
+import { ensureIslandSchema, getGoneModels, getLastTurnAt, getRecentTurns, loadWorld } from './world/store';
+import { CHAPTER_CHAIN, JENNY_CHAIN, KEVIN_CHAIN, NARRATOR_CHAIN } from './world/models';
+import { publicWorld, runTick } from './world/tick';
 
 type Bindings = {
   DB: D1Database;
@@ -37,25 +45,49 @@ app.use('*', async (c, next) => {
 });
 
 // Health check. A liveness probe answers "right now" or it answers nothing useful.
-app.get('/health', (c) => {
+app.get('/health', async (c) => {
   for (const [k, v] of Object.entries(cacheHeaders(CACHE.NO_STORE))) c.header(k, v);
-  return c.json({
-    status: 'alive',
-    name: 'Living Core',
-    version: '4.0.0',
-    agents: [
-      `Kevin (${AGENTS.kevin.model.id})`,
-      `Jenny (${AGENTS.jenny.model.id})`,
-    ],
-    brain: 'NVIDIA API (integrate.api.nvidia.com) — no templates, no scripted fallback',
-    categories: 14,
-    rss_feeds: 18,
-  });
+  try {
+    await ensureIslandSchema(c.env.DB);
+    const [world, gone, lastTurnAt, errorState] = await Promise.all([
+      loadWorld(c.env.DB),
+      getGoneModels(c.env.DB),
+      getLastTurnAt(c.env.DB),
+      c.env.DB.prepare(`SELECT key, value FROM system_state WHERE key IN ('last_error', 'last_fallback')`)
+        .all<{ key: string; value: string }>()
+        .catch(() => ({ results: [] as { key: string; value: string }[] })),
+    ]);
+
+    const byKey: Record<string, string> = {};
+    for (const row of errorState.results || []) byKey[row.key] = row.value;
+
+    const minutesSilent = lastTurnAt ? Math.round((Date.now() - Date.parse(lastTurnAt)) / 60000) : null;
+
+    return c.json({
+      status: world ? 'alive' : 'not_started',
+      era: 'island',
+      day: world?.day ?? null,
+      slot: world?.slot ?? null,
+      last_turn_at: lastTurnAt,
+      minutes_silent: minutesSilent,
+      last_error: byKey.last_error || null,
+      last_fallback: byKey.last_fallback || null,
+      gone_models: [...gone],
+      chains: {
+        kevin: KEVIN_CHAIN.map((m) => m.id),
+        jenny: JENNY_CHAIN.map((m) => m.id),
+        narrator: NARRATOR_CHAIN.map((m) => m.id),
+        chapter: CHAPTER_CHAIN.map((m) => m.id),
+      },
+    });
+  } catch (err) {
+    return c.json({ status: 'error', error: String(err) }, 500);
+  }
 });
 
 // Manual cron trigger (HTTP) — for debugging. The repo is public, so this URL is
-// known: allow at most one HTTP-triggered cycle per minute so it can't be hammered
-// to drain the daily AI budget. (The real schedule calls runCronCycle directly.)
+// known: allow at most one HTTP-triggered tick per minute so it can't be hammered
+// to drain the daily AI budget. (The real schedule calls runTick directly.)
 /*
   ⚠️ A GET THAT WRITES. It spends real AI budget and mutates D1, so it must never
   be answered from cache — a stored 200 here would also hide the rate limiter
@@ -75,32 +107,69 @@ app.get('/__cron', async (c) => {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
   ).bind(now.toISOString(), now.toISOString().replace('T', ' ').slice(0, 19)).run();
 
-  const result = await runCronCycle(c.env.DB, c.env.NVIDIA_API_KEY);
-  return c.json(result);
+  try {
+    const result = await runTick({ DB: c.env.DB, NVIDIA_API_KEY: c.env.NVIDIA_API_KEY });
+    try {
+      c.executionCtx.waitUntil(cleanupRateLimits(c.env.DB, 2 * 60 * 60 * 1000).catch(() => {}));
+    } catch {
+      await cleanupRateLimits(c.env.DB, 2 * 60 * 60 * 1000).catch(() => {});
+    }
+    return c.json({ success: true, ...result });
+  } catch (err) {
+    return c.json({ success: false, error: String(err) }, 500);
+  }
 });
 
-// SSE endpoint for live polling — returns latest state + new turns
+// The live poll — the hot path: public/script.js asks for this every FIVE
+// SECONDS. See CACHE.POLL in src/cache.ts for why the edge absorbs most of it.
+// Deliberately reads ONLY store.getRecentTurns + store.loadWorld — never the
+// old getFullState (which scanned 15k packets + a 152k-row GROUP BY on every
+// poll).
 app.get('/api/poll', async (c) => {
-  // The hot path: public/script.js asks for this every FIVE SECONDS, and each
-  // answer costs three D1 queries. See CACHE.POLL in src/cache.ts.
   for (const [k, v] of Object.entries(cacheHeaders(CACHE.POLL))) c.header(k, v);
-  const lastTurnId = parseInt(c.req.query('since') || '0');
+  const sinceId = parseInt(c.req.query('since') || '0') || 0;
 
-  const [state, dialogueCount, newTurns] = await Promise.all([
-    import('./db/packet').then(m => m.getFullState(c.env.DB)),
-    dialogueOps.getDialogueTurnCount(c.env.DB),
-    lastTurnId > 0
-      ? dialogueOps.getDialogueTurnsAfter(c.env.DB, lastTurnId)
-      : dialogueOps.getDialogueTurns(c.env.DB, { limit: 10 }),
-  ]);
+  const world = await loadWorld(c.env.DB);
+  if (!world) {
+    return c.json({ latest_turn_id: sinceId, new_turns: [], world: null, status: 'not_started' });
+  }
+
+  const turns = await getRecentTurns(c.env.DB, sinceId, 50);
+  const latestTurnId = turns.length ? turns[turns.length - 1].id : sinceId;
 
   return c.json({
-    dialogue_turns: dialogueCount,
-    latest_turn_id: newTurns.length > 0 ? Math.max(...newTurns.map(t => t.id)) : lastTurnId,
-    new_turns: newTurns,
-    coherence: parseFloat(state.system_state?.avg_coherence || '0.4'),
-    packet_count: state.packets?.length || 0,
+    latest_turn_id: latestTurnId,
+    new_turns: turns.map((t) => ({
+      id: t.id,
+      speaker: t.speaker,
+      say: t.say,
+      // Back-compat: pre-island clients read `content` as the spoken line.
+      content: t.say,
+      thought: t.thought,
+      do: t.action,
+      scene_id: t.scene_id,
+      created_at: t.created_at,
+      model: t.model,
+      // Part 2 additions (spec §A): what they were doing, where THEY (the
+      // speaker) were — not necessarily the scene's own shared `location`,
+      // which is meaningless while apart — and whether this turn's scene was
+      // together or apart, so the client can pick a rendering track.
+      activity: t.activity,
+      location: t.location,
+      mode: t.mode,
+    })),
+    world: publicWorld(world),
+    status: 'alive',
   });
+});
+
+app.get('/api/world', async (c) => {
+  for (const [k, v] of Object.entries(cacheHeaders(CACHE.POLL))) c.header(k, v);
+  const world = await loadWorld(c.env.DB);
+  if (!world) return c.json({ world: null, events: [], status: 'not_started' });
+  const { getRecentEvents } = await import('./world/store');
+  const events = await getRecentEvents(c.env.DB, 20);
+  return c.json({ world: publicWorld(world), events, status: 'alive' });
 });
 
 // ── SEO: robots, sitemap, favicon (must be before the catch-all redirect) ──
@@ -140,16 +209,26 @@ app.get('/favicon.ico', (c) =>
 // SSR page routes (must be before static asset fallback)
 createViewRoutes(app);
 
+// Dataset exports — mounted BEFORE the generic /api router so its narrower
+// routes win (see src/routes/exports.ts's header for what moved here).
+app.route('/api/export', exportsApp);
+
 // API routes
 app.route('/api', api);
 
-// Static assets (script.js, etc.) — only for non-HTML routes
+// Static assets (script.js, app.css) — only for non-HTML routes
 app.get('/script.js', async (c) => {
   try {
-    const response = await c.env.ASSETS.fetch(c.req.raw);
-    return response;
+    return await c.env.ASSETS.fetch(c.req.raw);
   } catch {
     return c.text('// script not found', 404);
+  }
+});
+app.get('/app.css', async (c) => {
+  try {
+    return await c.env.ASSETS.fetch(c.req.raw);
+  } catch {
+    return c.text('/* stylesheet not found */', 404);
   }
 });
 
@@ -166,132 +245,14 @@ app.all('*', (c) => {
 // ── SCHEDULED EVENT HANDLER ──
 // NOTE: this MUST be a method on the default export (see bottom of file). A bare
 // `export function scheduled` is NOT invoked by the Workers runtime for cron —
-// only `default.fetch` / `default.scheduled` are. That mistake silently stopped
-// the autonomous conversation.
+// only `default.fetch` / `default.scheduled` are.
 async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledController) {
-  const work = runCronCycle(env.DB, env.NVIDIA_API_KEY);
-  // Prefer waitUntil, but also await so the cycle reliably completes (local dev's
+  const work = runTick({ DB: env.DB, NVIDIA_API_KEY: env.NVIDIA_API_KEY })
+    .finally(() => cleanupRateLimits(env.DB, 2 * 60 * 60 * 1000).catch(() => {}));
+  // Prefer waitUntil, but also await so the tick reliably completes (local dev's
   // scheduled emulation doesn't always provide a usable waitUntil).
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(work);
   await work;
-}
-
-// ── Shared cron logic ──
-// Every cycle is the real brain — no dice rolls, no symbolic fallback. A topic keeps
-// going across cron cycles (same turn_group) until it reaches a soft cap or winds
-// down naturally. When a conversation ends, both agents privately REFLECT on it
-// (memories + journal — that's the growth loop), then a fresh one begins.
-
-const TURNS_PER_CYCLE = 2;        // turns added to the live conversation each cron tick
-const CONVO_SOFT_CAP = 36;        // a topic can run this many turns before they move on
-const KEEP_TALKING_CHANCE = 0.85; // each cycle, odds they stay on the same topic
-
-function randomSpeaker(): 'kevin' | 'jenny' {
-  return Math.random() < 0.5 ? 'kevin' : 'jenny';
-}
-
-async function runCronCycle(db: D1Database, apiKey?: string) {
-  try {
-    if (!apiKey) {
-      await noteAiError(db, 'cron: NVIDIA_API_KEY is not configured');
-      return { success: false, error: 'NVIDIA_API_KEY is not configured' };
-    }
-
-    // 0) Recover inbox items whose chain died mid-flight (stuck 'processing').
-    await db.prepare(
-      "UPDATE inbox SET status = 'pending' WHERE status = 'processing' AND created_at < datetime('now', '-15 minutes')"
-    ).run().catch(() => {});
-
-    // 1) Visitor notes get priority — guaranteed pickup even if the original
-    //    request-time chain failed (previously they could be stranded forever).
-    const pending = await dialogueOps.getInboxItems(db, { limit: 1, status: 'pending' });
-    if (pending.length > 0) {
-      const item = pending[0];
-      const group = dialogueEngine.generateId();
-      await dialogueOps.updateInboxStatus(db, item.id, 'processing', group);
-      const seed = buildInboxSeed(item.author, item.content);
-      const first = await dialogueEngine.generateDialogueTurn(db, seed, randomSpeaker(), group, 'inbox', apiKey);
-      if (first) {
-        await dialogueEngine.continueDialogueChain(db, first.nextSpeaker, group, TURNS_PER_CYCLE, apiKey, 'inbox');
-      } else {
-        await dialogueOps.updateInboxStatus(db, item.id, 'pending'); // brain unavailable — retry next cycle
-      }
-      return { success: true, outcome: 'inbox' };
-    }
-
-    // 2) Occasionally check the RSS feeds (~every 20 min on average). Fresh news
-    //    starts a new topic thread; we don't hammer 18 external feeds every 2 minutes.
-    if (Math.random() < 0.1) {
-      const rssResult = await rssEngine.processRSSFeeds(db, apiKey);
-      if (rssResult.turn_group && rssResult.discussion_turns > 0) {
-        await extendConversation(db, rssResult.turn_group, apiKey);
-        return { success: true, outcome: 'news' };
-      }
-    }
-
-    // 3) The living conversation: continue the current topic, or close it out
-    //    (reflection → memories + journals) and open a fresh one.
-    const latest = await dialogueOps.getDialogueTurns(db, { limit: 1 });
-    const activeGroup = latest.length > 0 ? latest[0].turn_group : null;
-    let count = 0;
-    if (activeGroup) {
-      count = (await dialogueOps.getDialogueTurns(db, { group: activeGroup, limit: CONVO_SOFT_CAP + 10 })).length;
-    }
-
-    let outcome: string;
-    if (activeGroup && count < CONVO_SOFT_CAP && Math.random() < KEEP_TALKING_CHANCE) {
-      await extendConversation(db, activeGroup, apiKey);
-      outcome = 'continued';
-    } else {
-      // Growth first: both agents privately digest the finished conversation.
-      if (activeGroup) {
-        await dialogueEngine.reflectOnGroup(db, apiKey, activeGroup).catch(() => {});
-      }
-      const group = dialogueEngine.generateId();
-      const first = await dialogueEngine.generateDialogueTurn(db, '', randomSpeaker(), group, 'cron', apiKey);
-      if (first) {
-        await dialogueEngine.continueDialogueChain(db, first.nextSpeaker, group, TURNS_PER_CYCLE - 1, apiKey, 'cron');
-      }
-      outcome = 'new';
-    }
-
-    await checkPendingRules(db).catch(() => {});
-
-    // Housekeeping: drop stale rate-limit rows so that table stays tiny.
-    const { cleanupRateLimits } = await import('./core/ratelimit');
-    await cleanupRateLimits(db, 2 * 60 * 60 * 1000).catch(() => {});
-
-    return { success: true, outcome };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
-}
-
-// Add a few more turns to an existing conversation thread (same turn_group).
-async function extendConversation(db: D1Database, turnGroup: string, apiKey: string): Promise<void> {
-  const groupTurns = await dialogueOps.getDialogueTurns(db, { group: turnGroup, limit: 1 });
-  if (groupTurns.length === 0) return;
-  const nextSpeaker = groupTurns[0].speaker === 'kevin' ? 'jenny' : 'kevin';
-  await dialogueEngine.continueDialogueChain(db, nextSpeaker, turnGroup, TURNS_PER_CYCLE, apiKey, 'cron');
-}
-
-// ── Check pending rule proposals after cron ──
-
-async function checkPendingRules(db: D1Database) {
-  const { getSystemState } = await import('./db/packet');
-  const { checkPendingProposals } = await import('./core/thinking_rules');
-
-  const stateRaw = await getSystemState(db);
-  const coherenceVal = parseFloat(stateRaw.avg_coherence || '0.4');
-  const result = await checkPendingProposals(db, coherenceVal);
-
-  if (result.adopted > 0) {
-    const { logAction } = await import('./db/packet');
-    await logAction(db, 'system', 'rules_adopted', undefined, {
-      count: result.adopted,
-      reasons: result.reasons.join('; '),
-    }).catch(() => {});
-  }
 }
 
 // Cloudflare invokes handlers as methods on the DEFAULT export. We expose Hono's

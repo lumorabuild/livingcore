@@ -1,0 +1,41 @@
+{
+  "_notes": [
+    "SPEC3 (docs/ISLAND.md §9): the home page ('/') is NOT a scrolling document",
+    "with a hero at the top — it IS the island, a fixed full-viewport pan/zoom",
+    "map (src/views/pages/HomePage.tsx's chrome=\"map\"). Its one visible <h1>",
+    "('Living Core · Sorrel Island') lives inside the floating top-left wordmark",
+    "chip, not at the top of a document flow, so the default 'main' selector is",
+    "wrong for this route — 'primaryContent' below is overridden per-route to",
+    "'.island-viewport' (the pan/zoom surface the SVG map renders into) for '/'",
+    "only. Every other route keeps a plain document layout (BaseLayout's",
+    "chrome=\"sheet\": a blurred, static island behind a floating paper sheet —",
+    "see src/views/chrome.tsx) whose real content is the sheet, hence the global",
+    "default '.paper-sheet'.",
+    "Run against the local sim with: node ~/.claude/skills/site-verify/verify.mjs --base http://127.0.0.1:8805"
+  ],
+  "base": "https://livingcore.cc",
+  "primaryContent": ".paper-sheet",
+  "viewports": [[360, 740], [768, 1024], [1280, 800]],
+  "routes": [
+    {
+      "path": "/",
+      "status": 200,
+      "primaryContent": ".island-viewport",
+      "mustContain": ["Living Core", "Sorrel Island"]
+    },
+    { "path": "/days", "status": 200, "mustContain": ["Days"] },
+    { "path": "/lab", "status": 200, "mustContain": ["Lab"] },
+    { "path": "/workshop", "status": 200, "mustContain": ["Workshop"] },
+    { "path": "/notebook", "status": 200, "mustContain": ["Notebook"] },
+    { "path": "/about", "status": 200, "mustContain": ["About"] },
+    { "path": "/archive", "status": 200, "mustContain": ["Archive"] },
+    { "path": "/this-page-does-not-exist", "status": 404 }
+  ],
+  "noJs": { "minWords": 60, "mustContain": ["<h1"] },
+  "lighthouse": {
+    "performance": 40,
+    "accessibility": 90,
+    "seo": 90,
+    "best-practices": 85
+  }
+}

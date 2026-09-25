@@ -9,3 +9,6 @@ debug_*.json
 .claude/
 *.local.json
 wrangler-account.json
+
+# site-verify run artifacts (Lighthouse dumps) — local only
+.site-verify/

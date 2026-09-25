@@ -1,131 +1,123 @@
 /** @jsxImportSource hono/jsx */
+// /archive — legacy (pre-island) + island-scene conversation index, paginated.
+//
+// Fix (spec §9): the old query GROUP BY'd all ~72k rows on every render with
+// no LIMIT/OFFSET. This bounds it: an index-friendly "newest N groups" query
+// via a subquery on MAX(id) per turn_group, LIMIT/OFFSET on the GROUPS, then
+// one more query for just those groups' aggregates.
+
 import { BaseLayout } from '../BaseLayout';
+import type { Tint } from '../chrome';
 
-interface ArchivePageData {
-  conversations: {
-    slug: string;
-    turnCount: number;
-    agents: string[];
-    date: string;
-    preview: string;
-  }[];
+const PER_PAGE = 50;
+
+/** A silent island turn is stored as `(silent) <action>` (see world/store.ts's
+ *  insertTurn), and the model can also write the literal word "nothing" as
+ *  its own SAY instead of leaving it blank. Neither reads as a preview of
+ *  what was actually SAID, so this softens both into one honest line rather
+ *  than leaking an internal marker onto a public page. */
+function previewLine(raw: string): string {
+  const silentMatch = raw.match(/^\(silent\)\s*(.*)$/i);
+  if (silentMatch) return `Quiet — ${silentMatch[1].trim() ? lowerFirst(silentMatch[1].trim()) : 'no words, no action'}`;
+  const bare = raw.trim().replace(/^[([]+|[)\].]+$/g, '').trim().toLowerCase();
+  if (bare === '' || bare === 'nothing' || bare === 'silence') return 'A quiet turn — nothing said.';
+  return raw;
+}
+function lowerFirst(s: string): string {
+  return s ? s[0].toLowerCase() + s.slice(1) : s;
+}
+
+interface ConversationRow {
+  slug: string;
+  turnCount: number;
+  agents: string[];
+  date: string;
+  preview: string;
+}
+
+export interface ArchivePageData {
+  conversations: ConversationRow[];
   totalTurns: number;
+  page: number;
+  hasNext: boolean;
 }
 
-export async function fetchArchivePageData(db: D1Database): Promise<ArchivePageData> {
-  // Get all turn groups
-  const groups = await db.prepare(
-    `SELECT turn_group, COUNT(*) as turn_count, 
-            GROUP_CONCAT(DISTINCT speaker) as speakers,
-            MIN(created_at) as first_date,
-            MIN(content) as first_content
-     FROM dialogue_turns 
+export async function fetchArchivePageData(db: D1Database, page: number): Promise<ArchivePageData> {
+  const safePage = Math.max(1, page);
+  const offset = (safePage - 1) * PER_PAGE;
+
+  // Newest PER_PAGE+1 groups by their latest turn id — bounded, no full scan.
+  const groupIds = await db.prepare(
+    `SELECT turn_group, MAX(id) AS last_id FROM dialogue_turns
      WHERE turn_group IS NOT NULL AND turn_group != ''
-     GROUP BY turn_group 
-     ORDER BY MIN(created_at) DESC`
-  ).all<any>();
+     GROUP BY turn_group
+     ORDER BY last_id DESC
+     LIMIT ? OFFSET ?`
+  ).bind(PER_PAGE + 1, offset).all<{ turn_group: string; last_id: number }>();
 
-  const total = await db.prepare('SELECT COUNT(*) as count FROM dialogue_turns').first<{ count: number }>();
+  const groups = (groupIds.results || []).slice(0, PER_PAGE);
+  const hasNext = (groupIds.results || []).length > PER_PAGE;
 
-  const conversations = (groups.results || []).map((g: any) => ({
-    slug: g.turn_group,
-    turnCount: g.turn_count,
-    agents: (g.speakers || '').split(',').filter(Boolean),
-    date: g.first_date || '',
-    preview: (g.first_content || '').slice(0, 200),
-  }));
+  const conversations: ConversationRow[] = [];
+  for (const g of groups) {
+    const agg = await db.prepare(
+      `SELECT COUNT(*) as turn_count, GROUP_CONCAT(DISTINCT speaker) as speakers,
+              MIN(created_at) as first_date, MIN(content) as first_content
+       FROM dialogue_turns WHERE turn_group = ?`
+    ).bind(g.turn_group).first<{ turn_count: number; speakers: string; first_date: string; first_content: string }>();
+    if (!agg) continue;
+    conversations.push({
+      slug: g.turn_group,
+      turnCount: agg.turn_count,
+      agents: (agg.speakers || '').split(',').filter(Boolean),
+      date: agg.first_date || '',
+      preview: previewLine(agg.first_content || '').slice(0, 200),
+    });
+  }
 
-  return {
-    conversations,
-    totalTurns: total?.count || 0,
-  };
+  const totalTurns = page === 1
+    ? (await db.prepare('SELECT COUNT(*) as count FROM dialogue_turns').first<{ count: number }>())?.count || 0
+    : -1; // only computed on page 1 — an exact COUNT(*) on every page would defeat the point of paginating
+
+  return { conversations, totalTurns, page: safePage, hasNext };
 }
 
-export function ArchivePage({ data }: { data: ArchivePageData }) {
-  const { conversations, totalTurns } = data;
+export function ArchivePage({ data, tint }: { data: ArchivePageData; tint?: Tint }) {
+  const { conversations, totalTurns, page, hasNext } = data;
 
   return (
     <BaseLayout
-      title={`Archive — ${conversations.length} AI conversations — Living Core`}
-      description={`Browse all ${conversations.length} conversations between Kevin & Jenny, two AI agents — ${totalTurns} turns of autonomous, memory-grounded dialogue. An open (CC0) dataset.`}
-      canonicalUrl="https://livingcore.cc/archive"
+      tint={tint}
+      title={page > 1 ? `Archive — page ${page} — Living Core` : 'Archive — every conversation — Living Core'}
+      description="Every conversation between Kevin & Jenny, from the talking era through the island era — an open (CC0) dataset."
+      canonicalUrl={`https://livingcore.cc/archive${page > 1 ? `?page=${page}` : ''}`}
     >
-      <div id="app" class="max-w-2xl mx-auto px-4 py-4 min-h-screen">
-        <header class="mb-4 border-b border-[#2f3336] pb-3">
-          <a href="/" class="text-xs text-[#71767b] hover:text-[#e7e9ea] mb-1 inline-block">← back to Living Core</a>
-          <h1 class="text-lg font-bold tracking-tight mt-1">📜 Archive</h1>
-          <p class="text-xs text-[#71767b] mt-0.5">
-            {conversations.length} conversations · {totalTurns} total turns
-          </p>
-        </header>
+      <div class="wrap">
+        <h1>Archive</h1>
+        <p class="muted">{totalTurns >= 0 ? `${totalTurns} total turns · ` : ''}page {page}</p>
 
         {conversations.length === 0 ? (
-          <p class="text-sm text-[#71767b] text-center py-12">No conversations yet. They form as ideas are dropped.</p>
+          <p class="empty-note">No conversations yet.</p>
         ) : (
-          <div class="space-y-3">
+          <div class="timeline">
             {conversations.map((conv) => (
-              <a href={`/conversation/${conv.slug}`} key={conv.slug}
-                class="block bg-[#1a1f2e] rounded-xl border border-[#2f3336] p-4 card-hover"
-              >
-                <div class="flex items-center justify-between mb-2">
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs font-medium text-[#e7e9ea]">{conv.turnCount} turns</span>
-                    <span class="text-[10px] text-[#71767b]">·</span>
-                    <span class="text-[10px] text-[#71767b]">
-                      {conv.agents.map(a => a === 'kevin' ? 'Kevin' : 'Jenny').join(' & ')}
-                    </span>
-                  </div>
-                  <span class="text-[10px] text-[#71767b]">
-                    {conv.date ? new Date(conv.date).toLocaleDateString() : ''}
-                  </span>
+              <div class="tl-item scene" key={conv.slug}>
+                <span class="tl-dot"></span>
+                <div class="tl-body">
+                  <a href={`/conversation/${conv.slug}`}>{conv.turnCount} turns · {conv.agents.map((a) => a === 'kevin' ? 'Kevin' : 'Jenny').join(' & ')}</a>
+                  <div class="tl-meta">{conv.date ? new Date(conv.date.replace(' ', 'T') + 'Z').toLocaleDateString() : ''}</div>
+                  <div class="tl-summary">{conv.preview}</div>
                 </div>
-                <p class="text-xs text-[#b0b3b8] leading-relaxed line-clamp-2">{escapeHtml(conv.preview)}</p>
-                <span class="mt-2 inline-block text-[10px] text-[#71767b] hover:text-[#e7e9ea] underline underline-offset-2">read full conversation →</span>
-              </a>
+              </div>
             ))}
           </div>
         )}
 
-        {/* Structured data: collection + breadcrumb */}
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
-          '@context': 'https://schema.org',
-          '@graph': [
-            {
-              '@type': 'CollectionPage',
-              'name': 'Living Core Conversations Archive',
-              'description': `Archive of ${conversations.length} conversations between Kevin and Jenny, two AI agents.`,
-              'url': 'https://livingcore.cc/archive',
-              'isPartOf': { '@type': 'Dataset', 'name': 'Living Core — autonomous AI dialogue dataset', 'url': 'https://livingcore.cc/' },
-              'mainEntity': {
-                '@type': 'ItemList',
-                'numberOfItems': conversations.length,
-                'itemListElement': conversations.slice(0, 100).map((conv, i) => ({
-                  '@type': 'ListItem',
-                  'position': i + 1,
-                  'url': `https://livingcore.cc/conversation/${conv.slug}`,
-                })),
-              },
-            },
-            {
-              '@type': 'BreadcrumbList',
-              'itemListElement': [
-                { '@type': 'ListItem', 'position': 1, 'name': 'Living Core', 'item': 'https://livingcore.cc/' },
-                { '@type': 'ListItem', 'position': 2, 'name': 'Archive', 'item': 'https://livingcore.cc/archive' },
-              ],
-            },
-          ],
-        }) }}></script>
+        <div class="pagination">
+          {page > 1 ? <a href={`/archive?page=${page - 1}`}>← Newer</a> : <span></span>}
+          {hasNext ? <a href={`/archive?page=${page + 1}`}>Older →</a> : <span></span>}
+        </div>
       </div>
     </BaseLayout>
   );
-}
-
-function escapeHtml(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }

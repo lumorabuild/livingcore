@@ -76,9 +76,14 @@ function urlEntry(loc: string, lastmod: string, changefreq: string, priority: st
 // archive grows (current scale is ~2,300 URLs, so everything is included).
 const MAX_CONVERSATIONS = 45000;
 const MAX_MEMORIES = 5000;
+// Island era caps — small and bounded; these tables grow by at most a
+// handful of rows a day, so these ceilings are years of headroom.
+const MAX_DAYS = 3000;
+const MAX_SCENES = 20000;
+const MAX_ARTIFACTS = 10000;
 
 export async function buildSitemapXml(db: D1Database): Promise<string> {
-  const [groups, packets, latest] = await Promise.all([
+  const [groups, packets, latest, chapters, closedScenes, artifacts] = await Promise.all([
     db.prepare(
       `SELECT turn_group, MAX(created_at) AS lastmod
        FROM dialogue_turns
@@ -124,12 +129,28 @@ export async function buildSitemapXml(db: D1Database): Promise<string> {
        LIMIT ?`
     ).bind(MAX_MEMORIES).all<{ id: string; last_updated: string }>(),
     db.prepare(`SELECT MAX(created_at) AS lastmod FROM dialogue_turns`).first<{ lastmod: string }>(),
+    // Island era — self-healing tables, so guard with .catch() in case a
+    // fresh deploy is asked for the sitemap before ensureIslandSchema has run.
+    db.prepare(`SELECT day, created_at FROM chapters ORDER BY day DESC LIMIT ?`).bind(MAX_DAYS)
+      .all<{ day: number; created_at: string }>()
+      .catch(() => ({ results: [] as { day: number; created_at: string }[] })),
+    db.prepare(`SELECT id, closed_at, opened_at FROM scenes WHERE status = 'closed' ORDER BY rowid DESC LIMIT ?`).bind(MAX_SCENES)
+      .all<{ id: string; closed_at: string | null; opened_at: string }>()
+      .catch(() => ({ results: [] as { id: string; closed_at: string | null; opened_at: string }[] })),
+    db.prepare(`SELECT id, created_at FROM artifacts ORDER BY id DESC LIMIT ?`).bind(MAX_ARTIFACTS)
+      .all<{ id: number; created_at: string }>()
+      .catch(() => ({ results: [] as { id: number; created_at: string }[] })),
   ]);
 
   const siteUpdated = iso(latest?.lastmod);
   const lines: string[] = [
     urlEntry(`${SITE}/`, siteUpdated, 'hourly', '1.0'),
     urlEntry(`${SITE}/archive`, siteUpdated, 'hourly', '0.9'),
+    urlEntry(`${SITE}/days`, siteUpdated, 'daily', '0.9'),
+    urlEntry(`${SITE}/workshop`, siteUpdated, 'daily', '0.7'),
+    urlEntry(`${SITE}/notebook`, siteUpdated, 'daily', '0.7'),
+    urlEntry(`${SITE}/lab`, siteUpdated, 'daily', '0.6'),
+    urlEntry(`${SITE}/about`, siteUpdated, 'monthly', '0.4'),
   ];
 
   for (const g of groups.results || []) {
@@ -137,6 +158,15 @@ export async function buildSitemapXml(db: D1Database): Promise<string> {
   }
   for (const p of packets.results || []) {
     lines.push(urlEntry(`${SITE}/memory/${p.id}`, iso(p.last_updated), 'monthly', '0.5'));
+  }
+  for (const ch of (chapters.results || []) as { day: number; created_at: string }[]) {
+    lines.push(urlEntry(`${SITE}/day/${ch.day}`, iso(ch.created_at), 'weekly', '0.6'));
+  }
+  for (const s of (closedScenes.results || []) as { id: string; closed_at: string | null; opened_at: string }[]) {
+    lines.push(urlEntry(`${SITE}/scene/${s.id}`, iso(s.closed_at || s.opened_at), 'monthly', '0.4'));
+  }
+  for (const a of (artifacts.results || []) as { id: number; created_at: string }[]) {
+    lines.push(urlEntry(`${SITE}/made/${a.id}`, iso(a.created_at), 'monthly', '0.4'));
   }
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${lines.join('\n')}\n</urlset>\n`;

@@ -196,24 +196,43 @@ export async function saveMemory(
  * Surface memories for a turn. The couple shares one life, so recall draws from
  * BOTH agents' memories. With a query: keyword relevance + importance + recency.
  * Without one (fresh conversation): a mix of the newest and the most important.
+ *
+ * `since` (island era, additive 2026-09-25): an ISO `YYYY-MM-DDTHH:MM:SSZ`
+ * instant (e.g. `system_state['island_started_at']`) — when given, only
+ * memories created at/after it are eligible. `agent_memories.created_at` is
+ * stored in the legacy `YYYY-MM-DD HH:MM:SS` shape (see nowStamp above), so
+ * `since` is converted to that same shape before comparing; both are UTC and
+ * zero-padded, so a plain string comparison is safe. This is how the island
+ * era stops the talking-era archive (the collapse itself) from feeding new
+ * prompts, without deleting or migrating a single row.
  */
 export async function recallMemories(
   db: D1Database,
   query: string,
-  limit: number = 5
+  limit: number = 5,
+  since?: string
 ): Promise<AgentMemory[]> {
   await ensureMindSchema(db);
+  const sinceLegacy = since ? since.replace('T', ' ').slice(0, 19) : null;
   // Candidate pool = the newest 250 UNION the 250 most important. The old code read
   // only the newest 250, so ~60% of memories (1,270 of 2,120) could never resurface —
   // an old, important insight was permanently unreachable the moment 250 newer rows
   // existed. Pulling the top-importance rows too lets the past actually come back.
-  const rows = await db.prepare(
-    `SELECT * FROM agent_memories WHERE id IN (
-        SELECT id FROM (SELECT id FROM agent_memories ORDER BY id DESC LIMIT 250)
-        UNION
-        SELECT id FROM (SELECT id FROM agent_memories ORDER BY importance DESC, id DESC LIMIT 250)
-     )`
-  ).all<AgentMemory>();
+  const rows = sinceLegacy
+    ? await db.prepare(
+        `SELECT * FROM agent_memories WHERE id IN (
+            SELECT id FROM (SELECT id FROM agent_memories WHERE created_at >= ? ORDER BY id DESC LIMIT 250)
+            UNION
+            SELECT id FROM (SELECT id FROM agent_memories WHERE created_at >= ? ORDER BY importance DESC, id DESC LIMIT 250)
+         )`
+      ).bind(sinceLegacy, sinceLegacy).all<AgentMemory>()
+    : await db.prepare(
+        `SELECT * FROM agent_memories WHERE id IN (
+            SELECT id FROM (SELECT id FROM agent_memories ORDER BY id DESC LIMIT 250)
+            UNION
+            SELECT id FROM (SELECT id FROM agent_memories ORDER BY importance DESC, id DESC LIMIT 250)
+         )`
+      ).all<AgentMemory>();
   const all = rows.results || [];
   if (all.length === 0) return [];
 

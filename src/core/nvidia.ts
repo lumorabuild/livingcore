@@ -45,8 +45,14 @@ export const FREE_TIER_RPM = 40;
  * model is NOT a working model — the only proof is a real completion. Both of the
  * models this site ran on (llama-4-maverick, ministral-14b) vanished this way and
  * Kevin & Jenny went silent for two days. Hence `status` + the fallback chain.
+ *
+ * 2026-09-25 (island era): re-probed the whole catalogue with this key — most of
+ * it now 404s. mistral-small-4 and llama-3.1-8b (the talking-era pair) are BOTH
+ * gone; see src/world/eras.ts for what that pairing did to the talking era once
+ * Kevin silently fell back to Jenny's model. New registry entries below are the
+ * island era's four chains (src/world/models.ts).
  */
-export const REGISTRY_VERIFIED_ON = '2026-07-17';
+export const REGISTRY_VERIFIED_ON = '2026-09-25';
 
 export type NvidiaModelStatus =
   | 'ok'           // returned a real completion on the date above
@@ -74,9 +80,9 @@ export const NVIDIA_MODELS: Record<string, NvidiaModelInfo> = {
     family: 'mistral',
     goodTemp: 0.85,
     maxTokens: 1024,
-    status: 'ok',
-    notes: 'Most capable of the working set and still ~2s at 700 output tokens — Kevin. ' +
-      'Warm, expressive persona voice; uses the [remember: …] tool correctly (verified 2026-07-17)',
+    status: 'unavailable',
+    notes: 'Was Kevin\'s talking-era model (2026-07-17 → 2026-08-26). 404s on this key as ' +
+      'of 2026-09-25. Do not use.',
   },
   'llama-3.1-8b': {
     id: 'meta/llama-3.1-8b-instruct',
@@ -84,9 +90,78 @@ export const NVIDIA_MODELS: Record<string, NvidiaModelInfo> = {
     family: 'meta',
     goodTemp: 0.8,
     maxTokens: 1024,
+    status: 'unavailable',
+    notes: 'Was Jenny\'s talking-era model. From 2026-07-30 Kevin silently fell back to THIS ' +
+      'model too (both agents on one model), which is what the talking-era collapse charts on ' +
+      '/lab show — see src/world/eras.ts. 404s on this key as of 2026-09-25. Do not use.',
+  },
+  // ── Island era (2026-09-25) — see src/world/models.ts for the four chains ──
+  'nemotron-3-ultra': {
+    id: 'nvidia/nemotron-3-ultra-550b-a55b',
+    label: 'Nemotron 3 Ultra (550B-A55B)',
+    family: 'nvidia',
+    goodTemp: 0.85,
+    maxTokens: 1024,
     status: 'ok',
-    notes: 'Classic workhorse, highest throughput (~0.8s). Lively, in-character chat ' +
-      'voice — Jenny (verified 2026-07-17)',
+    notes: 'Largest of the working set, 3-5s, the best voice of the four probed for dialogue — ' +
+      'Kevin\'s primary. Slow on JSON (~40s), so it leads the chapter chain but sits at the ' +
+      'END of the narrator chain. Needs chat_template_kwargs:{enable_thinking:false} or it ' +
+      'emits its reasoning as content (verified 2026-09-25).',
+  },
+  'nemotron-3-super': {
+    id: 'nvidia/nemotron-3-super-120b-a12b',
+    label: 'Nemotron 3 Super (120B-A12B)',
+    family: 'nvidia',
+    goodTemp: 0.8,
+    maxTokens: 1024,
+    status: 'ok',
+    notes: 'Fast (2-3s), good voice, Kevin\'s 2nd link. Sometimes 503 overloaded — the chain ' +
+      'exists for exactly this. Same enable_thinking:false requirement as nemotron-3-ultra ' +
+      '(verified 2026-09-25).',
+  },
+  'gemma-4-31b': {
+    id: 'google/gemma-4-31b-it',
+    label: 'Gemma 4 (31B) IT',
+    family: 'google',
+    goodTemp: 0.85,
+    maxTokens: 1024,
+    status: 'ok',
+    notes: 'Natural dialogue voice (3-20s) — Jenny\'s primary. On JSON tasks wraps the answer ' +
+      'in ```json fences (11s) — nvidiaChat/chain callers that need JSON must strip fences ' +
+      'themselves (verified 2026-09-25).',
+  },
+  'diffusiongemma-26b': {
+    id: 'google/diffusiongemma-26b-a4b-it',
+    label: 'DiffusionGemma (26B-A4B) IT',
+    family: 'google',
+    goodTemp: 0.8,
+    maxTokens: 1024,
+    status: 'ok',
+    notes: 'Fastest of the four (1-2s dialogue, 3s clean JSON with no fence) — Jenny\'s 2nd ' +
+      'link and the narrator chain\'s primary (JSON is its strength). Verified 2026-09-25.',
+  },
+  'laguna-xs': {
+    id: 'poolside/laguna-xs-2.1',
+    label: 'Laguna XS 2.1',
+    family: 'poolside',
+    goodTemp: 0.8,
+    maxTokens: 1024,
+    status: 'ok',
+    notes: 'Natural voice, 2-4s dialogue, 37s JSON (slow — keep it out of the front of the ' +
+      'narrator chain). Shared last-resort link on both Kevin\'s and Jenny\'s chains, ' +
+      'deliberately: it is the one model neither agent leads on, so a Kevin outage and a ' +
+      'Jenny outage never collapse them onto each other\'s model (verified 2026-09-25).',
+  },
+  'gpt-oss-20b': {
+    id: 'openai/gpt-oss-20b',
+    label: 'GPT-OSS 20B',
+    family: 'openai',
+    goodTemp: 0.8,
+    maxTokens: 1024,
+    status: 'ok',
+    notes: 'Plain voice (3-4s), clean JSON (10s). Needs reasoning_effort:"low" — without it, ' +
+      'higher effort settings burn tokens on hidden reasoning before answering. Verified ' +
+      '2026-09-25.',
   },
   'llama-3.2-11b-vision': {
     id: 'meta/llama-3.2-11b-vision-instruct',
@@ -133,11 +208,62 @@ export const NVIDIA_MODELS: Record<string, NvidiaModelInfo> = {
     id: 'mistralai/mistral-nemotron',
     label: 'Mistral Nemotron',
     family: 'mistral',
+    goodTemp: 0.6,
+    maxTokens: 1024,
+    status: 'ok',
+    notes: 'Back up (2026-09-25) after flapping in July — but still flaky (8-27s, sometimes ' +
+      '500) and its JSON is unreliable, so it only sits at the END of Jenny\'s chain, never ' +
+      'the narrator chain. NEVER send top_p to this family — it 400s ("Function id …") on it.',
+  },
+  'kimi-k3': {
+    id: 'moonshotai/kimi-k3',
+    label: 'Kimi K3',
+    family: 'moonshot',
+    goodTemp: 0.6,
+    maxTokens: 1024,
+    status: 'unavailable',
+    notes: 'Times out on every probe (2026-09-25). Same family as kimi-k2.6, same result. ' +
+      'Also rejects top_p (see mistral-nemotron) — never send it to any moonshotai/* id.',
+  },
+  'glm-5.3': {
+    id: 'zai-org/glm-5.3',
+    label: 'GLM 5.3',
+    family: 'zai',
     goodTemp: 0.7,
     maxTokens: 1024,
     status: 'unavailable',
-    notes: 'Mistral+NVIDIA collab. Worked 2026-06-12; now answers once then 400s with ' +
-      "\"Function id … \" — the NIM deployment is flapping (2026-07-17). Do not rely on it.",
+    notes: 'Thinking cannot be disabled on this deployment (no working chat_template_kwargs), ' +
+      'and it takes 40s+ once you let it think. Do not use for a time-boxed cron tick.',
+  },
+  'deepseek-v4.1-flash': {
+    id: 'deepseek-ai/deepseek-v4.1-flash',
+    label: 'DeepSeek V4.1 Flash',
+    family: 'deepseek',
+    goodTemp: 0.7,
+    maxTokens: 1024,
+    status: 'unavailable',
+    notes: '~80s per call on this key (2026-09-25) — too slow for the 85s per-tick wall clock ' +
+      'budget once anything else has run. Do not use.',
+  },
+  'muse-glimmer': {
+    id: 'inception/muse-glimmer',
+    label: 'Muse Glimmer',
+    family: 'inception',
+    goodTemp: 0.7,
+    maxTokens: 1024,
+    status: 'unavailable',
+    notes: '500s on every probe (2026-09-25). Do not use.',
+  },
+  'nemotron-3.5-lightning': {
+    id: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+    label: 'Nemotron 3.5 Lightning (30B-A3B)',
+    family: 'nvidia',
+    goodTemp: 0.8,
+    maxTokens: 1024,
+    status: 'unavailable',
+    notes: 'Answers fast but degenerate on persona prompts (2026-09-25 — same family as the ' +
+      'model warmaplive/techmaplive dropped from their ingest chain for the same reason, see ' +
+      'the root CLAUDE.md warmaplive row). Do not use for dialogue or JSON.',
   },
   'nemotron-nano-8b': {
     id: 'nvidia/llama-3.1-nemotron-nano-8b-v1',
@@ -184,6 +310,8 @@ export interface NvidiaChatResult {
   finishReason: string;
   totalTokens: number;   // real usage when reported, conservative estimate otherwise
   error?: string;
+  /** HTTP status of the LAST attempt; 0 for a network error / timeout that never got one. */
+  status: number;
 }
 
 const CHARS_PER_TOKEN = 3.5; // overcount slightly when no usage block is returned
@@ -191,6 +319,29 @@ const CHARS_PER_TOKEN = 3.5; // overcount slightly when no usage block is return
 function estimateTokens(messages: NvidiaChatMessage[], output: string): number {
   const inputChars = messages.reduce((n, m) => n + m.content.length, 0);
   return Math.ceil((inputChars + output.length) / CHARS_PER_TOKEN);
+}
+
+/**
+ * Per-model extra body fields a working reply needs (island era, §1):
+ *   • the nemotron-3 family emits its <think>…</think> reasoning as ordinary
+ *     content unless thinking is explicitly turned off;
+ *   • gpt-oss burns tokens on hidden reasoning above the lowest effort setting.
+ * Never add `top_p` here for any model — the moonshotai/mistral-nemotron
+ * families 400 on it ("Function id …"), and nothing in this app needs it.
+ */
+export function requestExtras(id: string): Record<string, unknown> {
+  if (id.startsWith('nvidia/nemotron-3')) return { chat_template_kwargs: { enable_thinking: false } };
+  if (id.includes('gpt-oss')) return { reasoning_effort: 'low' };
+  return {};
+}
+
+/**
+ * A model that cannot fully turn off its reasoning (or one probed before we
+ * knew to ask) sometimes prefixes the real answer with a `<think>…</think>`
+ * block. Strip it so callers never have to special-case it themselves.
+ */
+export function stripThink(text: string): string {
+  return text.replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, '').trim();
 }
 
 /**
@@ -215,9 +366,11 @@ export async function nvidiaChat(
     max_tokens: req.maxTokens ?? 1024,
     temperature: req.temperature ?? 0.7,
     ...(req.topP ? { top_p: req.topP } : {}),
+    ...requestExtras(req.model),
   });
 
   let lastError = '';
+  let lastStatus = 0;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
     try {
@@ -230,6 +383,7 @@ export async function nvidiaChat(
         body,
         signal: AbortSignal.timeout(timeoutMs),
       });
+      lastStatus = res.status;
 
       if (!res.ok) {
         lastError = `HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`;
@@ -241,7 +395,10 @@ export async function nvidiaChat(
       const data: any = await res.json();
       const choice = data?.choices?.[0];
       // Reasoning models (kimi) put thinking in a separate field; we only want content.
-      const text: string = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
+      // A model that could not fully disable thinking (or one probed before requestExtras
+      // knew to ask) may still prefix a <think>…</think> block onto real content — strip it.
+      const raw: string = typeof choice?.message?.content === 'string' ? choice.message.content : '';
+      const text: string = stripThink(raw);
       const finishReason: string = choice?.finish_reason || '';
       const totalTokens: number =
         typeof data?.usage?.total_tokens === 'number'
@@ -253,13 +410,14 @@ export async function nvidiaChat(
         continue;
       }
 
-      return { ok: true, text, finishReason, totalTokens };
+      return { ok: true, text, finishReason, totalTokens, status: lastStatus };
     } catch (err) {
       lastError = String(err).slice(0, 200);
+      lastStatus = 0; // network error / timeout — never reached the server
     }
   }
 
-  return { ok: false, text: '', finishReason: 'error', totalTokens: 0, error: lastError };
+  return { ok: false, text: '', finishReason: 'error', totalTokens: 0, error: lastError, status: lastStatus };
 }
 
 export interface NvidiaChatChainResult extends NvidiaChatResult {
@@ -267,6 +425,10 @@ export interface NvidiaChatChainResult extends NvidiaChatResult {
   model: NvidiaModelInfo;
   /** True when the primary was skipped over and a fallback answered instead. */
   usedFallback: boolean;
+  /** Model ids that answered 404/410 THIS call — the caller should markGone() them. */
+  gone: string[];
+  /** One entry per model actually tried, in order, for provenance/debugging. */
+  attempts: { id: string; status: number; ms: number }[];
 }
 
 /**
@@ -285,6 +447,23 @@ export interface NvidiaChatChainResult extends NvidiaChatResult {
  * really spoke. The public archive/dataset must never attribute a fallback's words
  * to the primary.
  */
+/**
+ * A wall-clock deadline (epoch ms) every chain call must finish by, or null.
+ *
+ * Module state on purpose, and safe only because of who calls models: the
+ * cron tick is the ONLY caller (the inbox stopped calling models in the island
+ * era), and ticks are serialised by the D1 tick lock, so two ticks never share
+ * an isolate's deadline at once. runTick sets it after taking the lock and
+ * clears it in `finally`. If a second caller ever appears, pass the deadline
+ * explicitly instead of widening this.
+ */
+let callDeadline: number | null = null;
+const MIN_USEFUL_CALL_MS = 4000;
+
+export function setCallDeadline(epochMs: number | null): void {
+  callDeadline = epochMs;
+}
+
 export async function nvidiaChatChain(
   apiKey: string,
   chain: NvidiaModelInfo[],
@@ -308,6 +487,13 @@ export async function nvidiaChatChain(
      * is valid).
      */
     accept?: (text: string) => boolean;
+    /**
+     * Model ids to skip this call — src/world/store.ts's dead-model memory
+     * (getGoneModels). If EVERY model in the chain is in `skip`, the skip set
+     * is ignored and the chain runs in full: a stale 12h memory must never
+     * silence a whole chain forever.
+     */
+    skip?: Set<string>;
   } = {}
 ): Promise<NvidiaChatChainResult> {
   const models = chain.filter(Boolean);
@@ -315,33 +501,56 @@ export async function nvidiaChatChain(
     throw new Error('nvidiaChatChain: empty model chain');
   }
 
+  const allSkipped = opts.skip && models.every((m) => opts.skip!.has(m.id));
+  const skip = allSkipped ? undefined : opts.skip;
+
   let last: NvidiaChatResult | null = null;
   let lastModel = models[0];
   const errors: string[] = [];
+  const gone: string[] = [];
+  const attempts: { id: string; status: number; ms: number }[] = [];
+  let usedFallbackIndex = -1;
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
+    if (skip?.has(model.id)) continue;
+    // The tick's hard deadline caps EVERY link, not just the first: a 5-model
+    // chain at 45 s a link is almost four minutes, and the tick lock only
+    // lives 115 s — past it, the next cron tick would run alongside this one
+    // and both would write the world. See setCallDeadline().
+    const left = callDeadline === null ? Infinity : callDeadline - Date.now();
+    if (left < MIN_USEFUL_CALL_MS) {
+      errors.push(`${model.id}: skipped (tick deadline)`);
+      break;
+    }
     const temperature = req.temperature ?? Math.max(0.5, model.goodTemp + (req.tempOffset ?? 0));
+    const startedAt = Date.now();
     const res = await nvidiaChat(
       apiKey,
       { ...req, model: model.id, temperature },
-      { timeoutMs: opts.timeoutMs, retries: 0 }
+      { timeoutMs: Math.min(opts.timeoutMs ?? 30000, left - 1000), retries: 0 }
     );
+    attempts.push({ id: model.id, status: res.status, ms: Date.now() - startedAt });
+    if (res.status === 404 || res.status === 410) gone.push(model.id);
+
     if (res.ok && (!opts.accept || opts.accept(res.text))) {
-      return { ...res, model, usedFallback: i > 0 };
+      return { ...res, model, usedFallback: attempts.length > 1 || i > 0, gone, attempts };
     }
     // Keep a usable-transport result as the last resort even if it failed `accept`,
     // so the caller still gets real text (and tokens) to fall back on.
     last = res;
     lastModel = model;
+    if (usedFallbackIndex < 0) usedFallbackIndex = i;
     errors.push(`${model.id}: ${res.ok ? 'rejected by accept()' : (res.error || 'unknown')}`);
   }
 
   return {
-    ...(last as NvidiaChatResult),
+    ...(last ?? { ok: false, text: '', finishReason: 'error', totalTokens: 0, status: 0 }),
     // Report the whole chain's failure, not just the last link's.
     error: errors.join(' | ').slice(0, 300),
     model: lastModel,
     usedFallback: false,
+    gone,
+    attempts,
   };
 }
