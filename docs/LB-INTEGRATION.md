@@ -7,10 +7,19 @@ for registering it with `id` and deploying it — read this before touching
 
 ## 1. Register the app with `id`
 
+✅ **Registered 2026-09-26 07:44Z** (`apps.created_at`; no migration file in
+the id repo records it, like techmaplive's). Before that, a real sign-in from
+`/shop` never came back. Verified after: `/auth/login?next=/shop` now reaches
+`/login?app_id=livingcore&return_to=https://livingcore.cc/auth/callback?next=%2Fshop&s=…`,
+and id's logout returns to `https://livingcore.cc/`. Check it any time,
+read-only: `curl -sI "https://id.lumorabuild.com/auth/start?app_id=livingcore&return_to=https%3A%2F%2Flivingcore.cc%2Fauth%2Fcallback"`
+must answer a `Location` that still carries `app_id=livingcore`.
+
 `id` (the SSO worker, `lumora-id-db`) needs to know `app_id: "livingcore"`
-exists and which URLs it's allowed to send a signed-in session back to,
-before its login page will render anything for Living Core at all — until
-this migration is applied, `/auth/start?app_id=livingcore&...` fails outright.
+exists and which URLs it's allowed to send a signed-in session back to.
+Without it, `/auth/start?app_id=livingcore&...` silently drops `app_id` and
+`return_to` and shows id's bare `/login` — the visitor signs in and is never
+sent back, so livingcore.cc never gets a session.
 
 New migration file, next number after the highest applied one in
 `lumora/shared/id/apps/master-auth/migrations/` (`0026_livingcore_app.sql` as
