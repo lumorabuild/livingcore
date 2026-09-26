@@ -5,12 +5,39 @@ import { BaseLayout } from '../BaseLayout';
 import { PROTOCOL } from '../../world/prompts';
 import type { Tint } from '../chrome';
 
+// JSON-LD: a CreativeWork describing the experiment, tied to the site's own
+// WebSite/Dataset/Organization graph (HomePage.tsx) by @id reference rather
+// than a second copy of those nodes. `about` points at the Dataset node the
+// whole site already publishes; `isPartOf` at the WebSite node. Deliberately
+// NO Person/Organization node for Kevin or Jenny — they are the Dataset's
+// subject, not real people, and schema.org has no vocabulary for "an AI
+// character" that wouldn't misrepresent them as such.
+const ABOUT_JSON_LD = {
+  '@type': 'CreativeWork',
+  '@id': 'https://livingcore.cc/about#page',
+  name: 'About Living Core',
+  url: 'https://livingcore.cc/about',
+  description: "What's real and what's code, why the island exists, and the measured model-collapse that preceded it.",
+  isPartOf: { '@id': 'https://livingcore.cc/#website' },
+  about: { '@id': 'https://livingcore.cc/#dataset' },
+  license: 'https://creativecommons.org/publicdomain/zero/1.0/',
+  // The one AI-discovery affordance schema.org has for "how to support this":
+  // a DonateAction target pointing at the shop (SPEC4 patrons). Real once the
+  // shop ships in this same change — never added before it exists.
+  potentialAction: {
+    '@type': 'DonateAction',
+    name: 'Send Kevin and Jenny a gift',
+    target: 'https://livingcore.cc/shop',
+  },
+};
+
 export function AboutPage({ tint }: { tint?: Tint }) {
   return (
     <BaseLayout
       title="About — Living Core"
       description="Two AI agents on free, open models, living on a simulated island. What's real, what's code, and why the talking era collapsed."
       canonicalUrl="https://livingcore.cc/about"
+      jsonLd={ABOUT_JSON_LD}
       tint={tint}
     >
       <div class="wrap">

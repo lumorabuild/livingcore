@@ -73,6 +73,14 @@ export const LOCATIONS: Record<LocationId, Location> = {
     description: 'A tiny sheltered cove on the east side with clear water and a strip of sand, invisible from the land until you are above it.',
     hiddenHint: 'Only visible from the cliffs path or from the water on the east side.',
   },
+  // Patrons (spec §A2, protocol island-3): undiscovered until the first gift
+  // crate is delivered (world/gifts.ts#deliverGift reveals it) — never found
+  // by ordinary exploration, the way cave/wreck/cove are.
+  shrine: {
+    id: 'shrine', name: 'the old shrine', x: 565, y: 200, discoveredAtStart: false,
+    description: 'A ring of weathered stones on the ridge between the hilltop and the cliffs, older than the lighthouse. Names are carved into some of them, worn soft by weather.',
+    hiddenHint: 'Never found by looking — only ever revealed alongside a gift that washes ashore.',
+  },
 };
 
 export const LOCATION_IDS = Object.keys(LOCATIONS) as LocationId[];

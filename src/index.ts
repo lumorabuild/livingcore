@@ -13,17 +13,26 @@ import { Hono } from 'hono';
 import api from './routes/api';
 import exportsApp from './routes/exports';
 import { createViewRoutes, renderNotFound } from './routes/views';
+import { registerAccountRoutes } from './routes/account';
+import { registerShopRoutes } from './routes/shop';
+import { registerDonationRoutes } from './routes/donations';
+import { registerAiRoutes } from './routes/ai';
 import { buildRobotsTxt, buildSitemapXml, FAVICON_SVG } from './core/seo';
 import { cleanupRateLimits } from './core/ratelimit';
 import { CACHE, cacheHeaders, seal } from './cache';
 import { ensureIslandSchema, getGoneModels, getLastTurnAt, getRecentTurns, loadWorld } from './world/store';
 import { CHAPTER_CHAIN, JENNY_CHAIN, KEVIN_CHAIN, NARRATOR_CHAIN } from './world/models';
 import { publicWorld, runTick } from './world/tick';
+import { reconcileGifts } from './world/gifts';
 
 type Bindings = {
   DB: D1Database;
   ASSETS: Fetcher;
   NVIDIA_API_KEY: string;
+  AUTH_SERVICE?: Fetcher;
+  COIN?: Fetcher;
+  DEV_FAKE_AUTH?: string;
+  LIVINGCORE_ENCRYPTION_KEY?: string;
 };
 
 type ScheduledController = {
@@ -108,7 +117,7 @@ app.get('/__cron', async (c) => {
   ).bind(now.toISOString(), now.toISOString().replace('T', ' ').slice(0, 19)).run();
 
   try {
-    const result = await runTick({ DB: c.env.DB, NVIDIA_API_KEY: c.env.NVIDIA_API_KEY });
+    const result = await runTick({ DB: c.env.DB, NVIDIA_API_KEY: c.env.NVIDIA_API_KEY, LIVINGCORE_ENCRYPTION_KEY: c.env.LIVINGCORE_ENCRYPTION_KEY });
     try {
       c.executionCtx.waitUntil(cleanupRateLimits(c.env.DB, 2 * 60 * 60 * 1000).catch(() => {}));
     } catch {
@@ -207,6 +216,12 @@ app.get('/favicon.ico', (c) =>
 );
 
 // SSR page routes (must be before static asset fallback)
+// Patrons (SPEC4): LB sign-in + account, the shop + shrine, lend-a-mind, AI discovery.
+// Mounted BEFORE the view routes and the catch-all.
+registerAccountRoutes(app);
+registerShopRoutes(app);
+registerDonationRoutes(app);
+registerAiRoutes(app);
 createViewRoutes(app);
 
 // Dataset exports — mounted BEFORE the generic /api router so its narrower
@@ -248,8 +263,13 @@ app.all('*', (c) => {
 // `export function scheduled` is NOT invoked by the Workers runtime for cron —
 // only `default.fetch` / `default.scheduled` are.
 async function scheduled(event: ScheduledEvent, env: Bindings, ctx: ScheduledController) {
-  const work = runTick({ DB: env.DB, NVIDIA_API_KEY: env.NVIDIA_API_KEY })
-    .finally(() => cleanupRateLimits(env.DB, 2 * 60 * 60 * 1000).catch(() => {}));
+  const work = runTick({ DB: env.DB, NVIDIA_API_KEY: env.NVIDIA_API_KEY, LIVINGCORE_ENCRYPTION_KEY: env.LIVINGCORE_ENCRYPTION_KEY })
+    .finally(() => Promise.all([
+      cleanupRateLimits(env.DB, 2 * 60 * 60 * 1000).catch(() => {}),
+      // Finishes gift purchases whose payment answer was unclear, and refunds
+      // gifts whose item left the catalog (world/gifts.ts#reconcileGifts).
+      reconcileGifts(env).catch((err) => console.warn('reconcileGifts failed', String(err))),
+    ]));
   // Prefer waitUntil, but also await so the tick reliably completes (local dev's
   // scheduled emulation doesn't always provide a usable waitUntil).
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(work);

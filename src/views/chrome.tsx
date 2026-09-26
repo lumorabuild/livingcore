@@ -45,6 +45,9 @@ export const MENU_LINKS: { href: string; label: string }[] = [
   { href: '/workshop', label: 'Things they made' },
   { href: '/notebook', label: "What they've learned" },
   { href: '/archive', label: 'The talking-era archive' },
+  { href: '/shop', label: 'Send them a crate — the shop' },
+  { href: '/shrine', label: 'The shrine of the Unseen' },
+  { href: '/account', label: 'Your account — sign in, lend a mind' },
   { href: '/about', label: 'About this experiment' },
 ];
 

@@ -33,7 +33,11 @@ export interface Weather {
 /** Location ids are fixed; `discovered` gates whether anyone may go there. */
 export type LocationId =
   | 'cottage' | 'garden' | 'dock' | 'beach' | 'tidepools' | 'woods' | 'spring'
-  | 'hilltop' | 'cliffs' | 'lighthouse' | 'cave' | 'wreck' | 'cove';
+  | 'hilltop' | 'cliffs' | 'lighthouse' | 'cave' | 'wreck' | 'cove'
+  // Patrons (spec §A2, protocol island-3): a ring of weathered stones on the
+  // ridge between the hilltop and the cliffs. Undiscovered until the first
+  // gift crate washes ashore — see world/gifts.ts#deliverGift.
+  | 'shrine';
 
 export interface Location {
   id: LocationId;
@@ -181,6 +185,16 @@ export interface NextScene {
   /** A visitor bottle that washes up in this scene. */
   bottle_id?: number;
   /**
+   * A queued gift crate that washes up / is delivered as this scene opens
+   * (world/gifts.ts#deliverGift, called from tick.ts's runOpenSceneJob).
+   * Mirrors bottle_id's shape but the gift's effects are applied and the row
+   * marked delivered ENTIRELY by code the moment the scene opens — never
+   * threaded into an agent's own turn context the way a bottle's exact text
+   * is (spec §A2: the crate's contents are FOUND TEXT in the scene's setup,
+   * which the narrator already wrote from the event description).
+   */
+  gift_id?: string;
+  /**
    * Whether they're together at `location` next, or apart (see `apart`).
    * Optional because morningSetup() never sets it (a day always opens
    * together) and a `next` saved before this field existed has none: missing
@@ -218,6 +232,20 @@ export interface World {
   next: NextScene | null;
   /** Island day on which the last visitor bottle washed up (so they don't arrive every scene). */
   last_bottle_day: number;
+  /**
+   * Island day the last gift crate was delivered (patrons, spec §A2) — sibling
+   * of `last_bottle_day`, same "at most once a day, bottles have first claim"
+   * rule in sim.ts#pickEvent. Optional: a world saved before this field
+   * existed has none (`?? 0` at every read site).
+   */
+  last_crate_day?: number;
+  /**
+   * Island day the shrine was last CODE-decided as the evening's location
+   * (sim.ts#shouldVisitShrine) — kept apart from last_bottle_day/
+   * last_crate_day because a shrine visit is a SCENE placement decision, not
+   * an arrival. Optional for the same before-this-field-existed reason.
+   */
+  last_shrine_visit_day?: number;
   /**
    * Snapshot of each agent's skill xp taken the moment the NIGHT scene
    * closed (tick.ts's runCloseSceneJob) — metrics.ts's computeDayMetrics
@@ -291,6 +319,20 @@ export interface TurnMetaRow {
   memory_refs: string;
   /** What the speaker was visibly doing on this turn (activity.ts#activityFromDo). Column added part 2 spec §A; self-healed via ALTER TABLE for a DB that predates it. */
   activity: Activity;
+  /**
+   * Set only when this turn was spoken by a DONATED model (src/world/donations.ts,
+   * SPEC4 §A3, protocol island-3) — the `model_donations.id` that answered.
+   * Optional/nullable: every turn before lend-a-mind shipped, and every turn
+   * that used the free NVIDIA chain, has none. Self-healed via ALTER TABLE.
+   */
+  donation_id?: number | null;
+  /**
+   * The donated model's own id (e.g. "claude-sonnet-4-6"), kept alongside
+   * `model` even though `model` already holds the same string — so a
+   * revoked/deleted donation still leaves an honest "who spoke" record. Only
+   * ever set together with donation_id.
+   */
+  donated_model?: string | null;
   created_at: string;
 }
 

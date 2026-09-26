@@ -117,6 +117,8 @@ const SHORT_LABEL: Record<LocationId, string> = {
   cottage: 'the cottage', garden: 'the garden', dock: 'the dock', beach: 'south beach',
   tidepools: 'tide pools', woods: 'the woods', spring: 'the spring', hilltop: 'hilltop',
   cliffs: 'north cliffs', lighthouse: 'lighthouse', cave: 'sea cave', wreck: 'the wreck', cove: 'hidden cove',
+  // Patrons (spec §A2): fogged like cave/wreck/cove until the first gift arrives.
+  shrine: 'the shrine',
 };
 
 function findProjectProgress(projects: PublicWorld['projects'], needle: string): number | null {
@@ -189,6 +191,8 @@ const DOOR: Partial<Record<string, { href: string; hrefLabel: string }>> = {
   wreck: { href: '/archive', hrefLabel: 'The talking-era archive' },
   chest: { href: '/archive', hrefLabel: 'The talking-era archive' },
   signpost: { href: '/about', hrefLabel: 'About this experiment' },
+  // Patrons (spec §A2): revealed the moment the first gift crate arrives.
+  shrine: { href: '/shrine', hrefLabel: 'Visit the shrine' },
 };
 
 const STATIC_BLURB: Record<string, string> = {
@@ -236,6 +240,9 @@ export function buildLocationInfo(world: PublicWorld): Record<string, LocationIn
   // this only ever links to its id, never duplicates its content.
   if (out.cottage) out.cottage.extra = [{ href: '#projects-dialog', label: 'See the projects' }];
   if (out.garden) out.garden.extra = [{ href: '#projects-dialog', label: 'See the projects' }];
+  // Patrons (spec §A2): the dock is where the supply boat and every crate
+  // tie up — the natural place to point at the shop, never a second door.
+  if (out.dock) out.dock.extra = [{ href: '/shop', label: 'Send them a crate →' }];
   // The lighthouse's card also carries the Lab's own headline numbers
   // (SPEC3: "the Lab strip numbers inside the lighthouse card") — appended
   // by HomePage.tsx, which is the only page that has computed them; this
@@ -536,6 +543,27 @@ function Cairn() {
       <ellipse cx={loc.x} cy={loc.y - 3} rx="9" ry="4" fill="#8a7a4c" />
       <ellipse cx={loc.x} cy={loc.y - 8} rx="6.5" ry="3.2" fill="#96875a" />
       <ellipse cx={loc.x} cy={loc.y - 12} rx="4" ry="2.2" fill="#a4956a" />
+    </g>
+  );
+}
+
+/** The shrine — a ring of weathered stones (patrons, spec §A2). Drawn only
+ *  once discovered; before that it is plain fog like cave/wreck/cove (the
+ *  generic FogUnknown loop in IslandMap() already covers it — LOCATIONS.shrine
+ *  has discoveredAtStart: false, same as those three). Deliberately humbler
+ *  than the Cairn (no gleam, no glow) — the shrine is Kevin and Jenny's own
+ *  thing to make of, never dressed up as a landmark from above. */
+function ShrineStones() {
+  const loc = LOCATIONS.shrine;
+  const stones: [number, number, number][] = [
+    [-18, 6, 5], [-9, 10, 4.2], [1, 11, 4.6], [11, 8, 4], [17, 1, 4.8], [10, -6, 4], [-2, -8, 4.4], [-13, -4, 4.2],
+  ];
+  return (
+    <g>
+      <ellipse cx={loc.x} cy={loc.y + 4} rx="26" ry="14" fill="#7c6f42" fill-opacity="0.18" />
+      {stones.map(([dx, dy, r], i) => (
+        <ellipse key={i} cx={loc.x + dx} cy={loc.y + dy} rx={r} ry={r * 1.3} fill="#8a8378" stroke="#5a5548" stroke-width="0.8" fill-opacity="0.85" />
+      ))}
     </g>
   );
 }
@@ -1014,6 +1042,13 @@ export function IslandMap({ world }: { world: PublicWorld }) {
         <Landmark href="/notebook" label="What they've learned" cx={LOCATIONS.hilltop.x} cy={LOCATIONS.hilltop.y - 8} hitR={20} landmarkKey="hilltop">
           <Cairn />
         </Landmark>
+        {/* Patrons (spec §A2): fogged (the generic undiscovered-places loop
+            below) until the first gift crate arrives; from then on, a real door. */}
+        {discovered.has('shrine') && (
+          <Landmark href="/shrine" label="The shrine" cx={LOCATIONS.shrine.x} cy={LOCATIONS.shrine.y} hitR={26} landmarkKey="shrine">
+            <ShrineStones />
+          </Landmark>
+        )}
 
         {/* weather layers, toggled by [data-weather] in app.css */}
         <g class="rain-layer">

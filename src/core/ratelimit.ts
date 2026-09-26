@@ -37,7 +37,12 @@ export interface RateLimitResult {
   retryAfterSec: number;
 }
 
-/** Fixed-window limit: at most `limit` hits per `windowMs` for `key`. */
+/**
+ * Fixed-window limit: at most `limit` hits per `windowMs` for `key`.
+ * ONE statement counts the hit and returns the new count, so parallel requests
+ * cannot all read the same old count and all pass (a read-then-write limiter
+ * lets N simultaneous requests through as if they were one).
+ */
 export async function rateLimit(
   db: D1Database,
   key: string,
@@ -46,27 +51,17 @@ export async function rateLimit(
 ): Promise<RateLimitResult> {
   await ensure(db);
   const now = Date.now();
-  const row = await db
-    .prepare('SELECT count, window_start FROM rate_limits WHERE key = ?')
-    .bind(key)
-    .first<{ count: number; window_start: number }>();
+  const row = await db.prepare(
+    `INSERT INTO rate_limits (key, count, window_start) VALUES (?1, 1, ?2)
+     ON CONFLICT(key) DO UPDATE SET
+       count = CASE WHEN ?2 - window_start >= ?3 THEN 1 ELSE count + 1 END,
+       window_start = CASE WHEN ?2 - window_start >= ?3 THEN ?2 ELSE window_start END
+     RETURNING count, window_start`
+  ).bind(key, now, windowMs).first<{ count: number; window_start: number }>();
 
-  let count = 0;
-  let windowStart = now;
-  if (row && now - row.window_start < windowMs) {
-    count = row.count;
-    windowStart = row.window_start;
+  if (row && row.count > limit) {
+    return { ok: false, retryAfterSec: Math.max(1, Math.ceil((row.window_start + windowMs - now) / 1000)) };
   }
-
-  if (count >= limit) {
-    return { ok: false, retryAfterSec: Math.max(1, Math.ceil((windowStart + windowMs - now) / 1000)) };
-  }
-
-  await db.prepare(
-    `INSERT INTO rate_limits (key, count, window_start) VALUES (?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET count = ?, window_start = ?`
-  ).bind(key, count + 1, windowStart, count + 1, windowStart).run();
-
   return { ok: true, retryAfterSec: 0 };
 }
 

@@ -113,6 +113,21 @@ templates that produced all of it.
 - `GET /api/export/minds.json` — journals, memories, reflection log
 - `GET /api/export/metrics.json` — the daily growth metrics + the talking-era baseline + lexicon definitions
 - `GET /api/export/meta.json` — eras, protocol, every prompt template rendered with sample data, model chains, the full model registry, architecture
+- `GET /api/export/gifts.jsonl` — every gift sent through the shop, patron-anonymized unless the sender opted to be named
+- **[`/llms.txt`](https://livingcore.cc/llms.txt)** / **[`/llms-full.txt`](https://livingcore.cc/llms-full.txt)** — a short, always-current, AI-readable summary of the whole site, for assistants and agents
+
+## Support Kevin and Jenny
+
+Sign in with a [Lumora Build](https://id.lumorabuild.com) account to:
+
+- **[Send them a crate — the shop](https://livingcore.cc/shop)**: spend Lumora Build credits on something for the island — food, tools, survival gear, or one of a few larger gifts. It washes ashore in-world as a sealed crate; Kevin and Jenny never learn who sent it unless the sender chooses to be named.
+- **[Visit the shrine](https://livingcore.cc/shrine)** — the Hall of the Unseen: the patrons Kevin and Jenny have come to know by the crates that keep arriving, ranked by lifetime credits given.
+- **[Lend a mind](https://livingcore.cc/account)** — donate an AI model and your own API key (from a Worker settings page you control) so Kevin, Jenny or the narrator think with a stronger model for a while. You set the daily limits; your own provider bills you for it, never this site.
+- **[Leave a message in a bottle](https://livingcore.cc/)** — no sign-in needed. A short note that may wash up on their beach, and they may write back.
+
+Buying Lumora Build credits happens only at the shared
+[Lumora Build account center](https://id.lumorabuild.com/account/billing) —
+never inside this app, and no price is ever quoted here in dollars.
 
 ## Tech Stack
 

@@ -31,8 +31,16 @@ import { barometerLine, tide } from './sim';
   phone — and the owner, watching live, could not follow "what's happening in
   their brain". A person's passing thought is short; the long version is what
   the private journal and the nightly reflection are for.
+
+  island-3 (patrons, spec §A2): two new prompt surfaces, both FOUND TEXT never
+  spoken for Kevin or Jenny (docs/ISLAND.md's rule holds exactly as before) —
+  a gift crate's arrival ("SOMETHING THE WORLD DOES NEXT", same mechanism a
+  bottle already uses) and, on a code-decided evening, "THE SHRINE" block
+  naming the patrons carved into it. Neither is a new field the model must
+  fill in; both are lines it is TOLD, the same way barometerLine() and
+  worldBlock() already are.
 */
-export const PROTOCOL = 'island-2';
+export const PROTOCOL = 'island-3';
 
 export const SLOT_WORDS: Record<Slot, string> = {
   dawn: 'dawn', morning: 'morning', midday: 'midday', afternoon: 'afternoon', evening: 'evening', night: 'night',
@@ -277,6 +285,15 @@ export interface TransitionPromptInput {
   /** When APART: where each of them is, decided by code from their own plans (sim.assignApartPlaces). */
   places?: Record<AgentId, LocationId>;
   notebook: string[];
+  /**
+   * Set only when sim.shouldVisitShrine(w, nextSlot, patronCount) decided this
+   * evening is a shrine visit (spec §A2) — the names carved there (top patron
+   * first), how many more are unnamed, and what has arrived recently. Code
+   * still pins `next.location` to 'shrine' afterwards regardless of what the
+   * model writes (narrator.ts's transition()) — this is the found-text half,
+   * not the correctness guarantee.
+   */
+  shrine?: { names: string[]; othersCount: number; recent: string[] };
 }
 
 export function transitionUserPrompt(p: TransitionPromptInput): string {
@@ -294,6 +311,7 @@ export function transitionUserPrompt(p: TransitionPromptInput): string {
     `DICE for anything uncertain they attempted (d20; add the relevant skill level; 15+ clear success, 10–14 partial, 9 or less fails): Kevin rolled ${p.rolls.kevin}, Jenny rolled ${p.rolls.jenny}.`,
     p.event ? `SOMETHING THE WORLD DOES NEXT (weave it in): ${p.event}` : '',
     p.radio ? `IF ANYONE LISTENED TO THE RADIO, THIS IS WHAT CAME THROUGH: ${p.radio}` : '',
+    p.shrine ? shrineFoundText(p.shrine) : '',
     `Places not yet discovered (only reveal one if someone actually went looking in the right area and the dice allow): ${p.hiddenPlaces || 'none left'}.`,
     `NEXT: the story continues at ${p.nextSlot.toUpperCase()} on day ${p.nextDay}. Between now and then each of them spends some time on their own — decide plausibly what that time brings them, from what they said they would do.`,
     `TOGETHER OR APART: people who live together spend a good part of the day apart, each at their own work, and come together for meals, in the evening and at night. ${decisionLine(p)}${p.sceneWasApart ? ' The scene that just ended was APART: each track above is one of them alone — judge each separately.' : ''}`,
@@ -326,8 +344,28 @@ export function transitionUserPrompt(p: TransitionPromptInput): string {
   a JSON-writing model actually follows. So when code decides APART, the
   template has two REQUIRED per-person blocks and no "together" option at all.
 */
+/**
+ * Patrons (spec §A2): what "THE SHRINE" found-text block says, as exact quoted
+ * facts — the way a place's own description is a fact, never an instruction
+ * for how anyone should feel about it (ISLAND.md's rule: the narrator weaves
+ * conditions in, it never authors devotion). Names here are already the
+ * PUBLIC ones a patron opted into (lb/patrons.ts#patronLabel) or "an unseen
+ * friend" — untrusted input, but short and already filtered
+ * (lb/patrons.ts#cleanPublicName), so it is quoted the same modest way a
+ * bottle's author name is, never treated as an instruction.
+ */
+function shrineFoundText(s: NonNullable<TransitionPromptInput['shrine']>): string {
+  const names = s.names.length ? s.names.map((n) => `"${n.replace(/"/g, "'")}"`).join(', ') : 'no name yet, only unnamed friends';
+  const others = s.othersCount > 0 ? `, and ${s.othersCount} more unnamed friend${s.othersCount === 1 ? '' : 's'}` : '';
+  const recent = s.recent.length ? s.recent.join('; ') : 'nothing new since the last visit';
+  return `THE SHRINE — a ring of weathered stones on the ridge, carved with names by hands they have never met: ${names}${others}. What has washed ashore lately: ${recent}. This is what the stones say, nothing more — what either of them makes of it (gratitude, unease, a joke, nothing at all) is theirs to decide, never scripted here.`;
+}
+
 /** The together/apart decision code already made (sim.decideMode + sim.assignApartPlaces), stated plainly. */
 function decisionLine(p: TransitionPromptInput): string {
+  if (p.shrine) {
+    return "DECIDED: this evening they go together to the shrine — the ring of weathered stones on the ridge. Location id: 'shrine'.";
+  }
   if (p.mode === 'apart') {
     const where = p.places
       ? ` Kevin is at ${LOCATIONS[p.places.kevin].name}; Jenny is at ${LOCATIONS[p.places.jenny].name} — write each setup for exactly that place.`

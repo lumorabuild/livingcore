@@ -407,10 +407,34 @@ const EVENT_TABLE: { kind: string; text: string; weight: (w: World) => number }[
  * itself at up to 0.6 once at least a day has passed since the last one. Keeps
  * `w.recent_events` (last 8 kinds) to bias away from repeats; mutates it when
  * it returns an event.
+ *
+ * `giftPending` (patrons, spec §A2) is the sibling of `bottlePending`, forcing
+ * the EXISTING `lost_crate` flavour kind (never a second event kind) so a gift
+ * crate reuses the same "something washed up" mechanism a bottle already
+ * proves out — never more than one forced special delivery a day, and
+ * BOTTLES HAVE FIRST CLAIM: the bottle check above runs first and returns
+ * immediately when it fires, so a gift only ever gets a turn when no bottle
+ * is due this scene. The caller supplies the crate's own flavour text
+ * (world/gifts.ts#craftCrateEventText — different wording per item category)
+ * and the ids the transition/tick pipeline needs to actually deliver it —
+ * this function only decides WHETHER it fires, never what's inside it.
  */
-export function pickEvent(w: World, opts: { stale: boolean; bottlePending: boolean }): PickedEvent | null {
+export function pickEvent(
+  w: World,
+  opts: { stale: boolean; bottlePending: boolean; giftPending?: { text: string; giftId: string; itemId: string } }
+): PickedEvent | null {
   if (opts.bottlePending && (w.day - w.last_bottle_day) >= 1 && Math.random() < 0.6) {
     const picked: PickedEvent = { kind: 'bottle', text: 'A bottle has washed up on the south beach, sealed with wax.' };
+    pushRecent(w, picked.kind);
+    return picked;
+  }
+
+  if (opts.giftPending && (w.day - (w.last_crate_day || 0)) >= 1 && Math.random() < 0.6) {
+    const picked: PickedEvent = {
+      kind: 'lost_crate',
+      text: opts.giftPending.text,
+      data: { giftId: opts.giftPending.giftId, itemId: opts.giftPending.itemId },
+    };
     pushRecent(w, picked.kind);
     return picked;
   }
@@ -494,6 +518,7 @@ const PLACE_WORDS: [LocationId, RegExp][] = [
   ['cave', /\b(sea )?cave\b/],
   ['wreck', /\b(wreck|reef|hulk)\b/],
   ['cove', /\b(hidden )?cove\b/],
+  ['shrine', /\b(shrine|ring of stones|standing stones|weathered stones|the old stones)\b/],
 ];
 
 export function resolveLocation(raw: unknown, w: World): LocationId | null {
@@ -647,6 +672,24 @@ function placesFromPlan(plan: string[], w: World): LocationId[] {
     for (const id of ACTIVITY_PLACE[act] || []) if (w.discovered.includes(id)) out.push(id);
   }
   return out;
+}
+
+/*
+  THE SHRINE VISIT IS ALSO CODE-DECIDED, NOT ASKED OF THE NARRATOR — same
+  reasoning as decideMode()/assignApartPlaces() above: a model asked "where do
+  they end up tonight?" has no reason to ever pick a stone circle over the
+  cottage, so the decision has to be made here and simply HANDED to the
+  narrator as a fact to write around (prompts.ts's transitionUserPrompt).
+  `patronCount` is passed in rather than queried here because sim.ts is
+  DELIBERATELY DB-free (this file's header) — narrator.ts fetches it from
+  world/gifts.ts and passes the number in.
+*/
+export function shouldVisitShrine(w: World, nextSlot: Slot, patronCount: number): boolean {
+  if (nextSlot !== 'evening') return false;
+  if (!w.discovered.includes('shrine')) return false;
+  if (patronCount < 1) return false;
+  const lastVisit = w.last_shrine_visit_day || 0;
+  return (w.day - lastVisit) >= 3;
 }
 
 export function assignApartPlaces(w: World): Record<AgentId, LocationId> {

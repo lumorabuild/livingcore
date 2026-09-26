@@ -60,7 +60,8 @@ exportsApp.get('/dialogue.jsonl', async (c) => {
             tm.era as era, tm.protocol as protocol, tm.scene_id as scene_id, tm.sim_day as sim_day,
             tm.sim_slot as sim_slot, tm.location as location, tm.thought as thought, tm.action as action,
             tm.retries as retries, tm.retry_reason as retry_reason, tm.notebook_refs as notebook_refs,
-            tm.activity as activity, sc.mode as scene_mode
+            tm.activity as activity, tm.donation_id as donation_id, tm.donated_model as donated_model,
+            sc.mode as scene_mode
      FROM dialogue_turns dt LEFT JOIN turn_meta tm ON tm.turn_id = dt.id
      LEFT JOIN scenes sc ON sc.id = tm.scene_id
      WHERE dt.id > ? ORDER BY dt.id ASC LIMIT ?`
@@ -96,6 +97,14 @@ exportsApp.get('/dialogue.jsonl', async (c) => {
     // island-turn honesty as everything else in this row.
     activity: t.activity ?? null,
     scene_mode: t.scene_mode ?? null,
+    // Lend-a-mind (SPEC4 §A3, protocol island-3): `donation_id` is an OPAQUE
+    // internal row id — never a user id, never an email, and it stops
+    // resolving to anything at all the moment a donor revokes (the row's
+    // key_enc is wiped, and listDonations no longer shows it to them either).
+    // `donated_model` is exactly as public as `model` already is above.
+    donation_id: t.donation_id ?? null,
+    donated: !!t.donation_id,
+    donated_model: t.donated_model ?? null,
   }));
 
   const lastId = turns.length > 0 ? turns[turns.length - 1].id : sinceId;
@@ -375,7 +384,7 @@ exportsApp.get('/meta.json', async (c) => {
   ]);
 
   return c.json({
-    experiment: 'Living Core — two AI agents (a married couple) living continuously in public, protocol island-1',
+    experiment: `Living Core — two AI agents (a married couple) living continuously in public, protocol ${PROTOCOL}`,
     site: 'https://livingcore.cc',
     source: 'https://github.com/lumorabuild/livingcore',
     docs: 'https://github.com/lumorabuild/livingcore/blob/main/DATA.md',
@@ -432,6 +441,20 @@ exportsApp.get('/meta.json', async (c) => {
       island: '/api/export/island.json',
       metrics: '/api/export/metrics.json',
       meta: '/api/export/meta.json',
+      gifts: '/api/export/gifts.jsonl?since=<last created_at>&after=<last id> (500 rows; add &limit=100 or &limit=2000; stop on an empty page)',
+      llms_txt: '/llms.txt',
+      llms_full_txt: '/llms-full.txt',
+    },
+    // Patrons (SPEC4): where an agent or a human finds the features described
+    // in /llms.txt's "How to support Kevin and Jenny" section — kept here too
+    // so anything that already discovered meta.json (e.g. via the Dataset
+    // JSON-LD node) never needs a second guess.
+    support: {
+      shop: '/shop',
+      shrine: '/shrine',
+      account: '/account',
+      lend_a_mind: '/account',
+      bottles: '/',
     },
   }, 200, cacheHeaders(CACHE.DERIVED_JSON));
 });

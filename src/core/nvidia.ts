@@ -7,21 +7,29 @@
 // .dev.vars locally — never in code or git.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// FREE-TIER INVARIANT (Kevin's rule, 2026-07-17): livingcore must ONLY ever call
-// NVIDIA's free developer tier — never a paid provider, never a paid endpoint.
-// This is safe BY CONSTRUCTION and must stay that way:
-//   • This module is the ONLY place that talks to any AI. The single fetch() below
-//     hits NVIDIA_BASE_URL and nothing else. There is no OpenAI/Anthropic/Google/
-//     Workers-AI code path anywhere in the repo — keep it that way.
-//   • Every model on build.nvidia.com is free on the developer tier. There is NO
-//     per-token or per-model billing on this endpoint and NO card on the account,
-//     so no call here can ever incur a charge. Over-use returns HTTP 429 (handled
-//     in nvidiaChat), never a bill.
-//   • The real ceiling is RATE, not money: FREE_TIER_RPM below. Stay under it.
-// Before adding a model to the registry: (1) probe it returns a real completion
-// (status:'ok'), and (2) confirm it's reachable on THIS endpoint with our key —
-// which, by the point above, guarantees it's free. Do NOT add a model that needs
-// any other endpoint, key, or account tier.
+// FREE-TIER INVARIANT (Kevin's rule, 2026-07-17; amended 2026-09-26 for
+// lend-a-mind, SPEC4 §A3): livingcore's OWN key (NVIDIA_API_KEY) only ever
+// calls NVIDIA's free developer tier — never a paid provider, never a paid
+// endpoint, and this project never pays for anyone else's call either way.
+//   • This module is still the ONLY place that ever calls fetch() for a model.
+//     Every model on build.nvidia.com is free on the developer tier — no
+//     per-token or per-model billing, no card on the account, so a call using
+//     our OWN key can never incur a charge. The real ceiling there is RATE,
+//     not money: FREE_TIER_RPM below.
+//   • THE ONE EXCEPTION: a signed-in visitor may DONATE their own model + API
+//     key at /account ("lend a mind" — src/world/donations.ts) so Kevin,
+//     Jenny or the narrator can think with it for a while. That call is
+//     billed to THAT DONOR, by THEIR provider, at THEIR rates — never to this
+//     project — and a donated link is still just one more entry in a chain
+//     passed to nvidiaChatChain below, with its own baseUrl/apiKey resolved
+//     PER LINK (see NvidiaModelInfo.baseUrl/apiKey/extraHeaders) — never a
+//     second HTTP client, and the free NVIDIA chain always remains the
+//     permanent fallback for every agent and every role.
+// Before adding a model to the PROJECT'S OWN registry below: (1) probe it
+// returns a real completion (status:'ok'), and (2) confirm it's reachable on
+// THIS endpoint with our key — which, by the point above, guarantees it's
+// free. Do NOT add a model here that needs any other endpoint, key, or
+// account tier — that's what a donation is for.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
@@ -67,6 +75,19 @@ export interface NvidiaModelInfo {
   maxTokens: number;
   status: NvidiaModelStatus;
   notes: string;
+  // ── Lend-a-mind (donated models, src/world/donations.ts) — all optional,
+  // so every existing NVIDIA_MODELS entry above is untouched. When set, THIS
+  // link is a donor's own provider/key, never the project's NVIDIA_API_KEY. ──
+  /** Per-link base URL override. Undefined = NVIDIA_BASE_URL (the project's own key/endpoint). */
+  baseUrl?: string;
+  /** Per-link API key override — a DECRYPTED donor key, held only for the life of one call. Undefined = the caller's own apiKey argument. */
+  apiKey?: string;
+  /** Extra headers this provider wants (e.g. an attribution header). */
+  extraHeaders?: Record<string, string>;
+  /** OpenAI reasoning models (o*, gpt-5*) take `max_completion_tokens`, not `max_tokens`. */
+  useMaxCompletionTokens?: boolean;
+  /** The donation row this link came from — used only to record usage/errors back onto that row; never logged, never exported. */
+  donationId?: number;
 }
 
 // The full catalogue we've probed with our key, kept as a reusable registry for
@@ -302,6 +323,8 @@ export interface NvidiaChatRequest {
   maxTokens?: number;
   temperature?: number;
   topP?: number;
+  /** A donated OpenAI reasoning model (o*, gpt-5*) — see NvidiaModelInfo.useMaxCompletionTokens. */
+  useMaxCompletionTokens?: boolean;
 }
 
 export interface NvidiaChatResult {
@@ -351,7 +374,14 @@ export function stripThink(text: string): string {
 export async function nvidiaChat(
   apiKey: string,
   req: NvidiaChatRequest,
-  opts: { timeoutMs?: number; retries?: number } = {}
+  opts: {
+    timeoutMs?: number;
+    retries?: number;
+    /** Lend-a-mind: a donor's own provider base URL. Undefined = NVIDIA_BASE_URL. */
+    baseUrl?: string;
+    /** Lend-a-mind: extra headers a donor's provider wants. */
+    extraHeaders?: Record<string, string>;
+  } = {}
 ): Promise<NvidiaChatResult> {
   // 20s is ~10x the measured p95 for the models we run (~2s for a full 700-token
   // reply on a long persona prompt), and deliberately far below the old 60s: a
@@ -359,11 +389,17 @@ export async function nvidiaChat(
   // tight is what lets the fallback chain still finish inside one 2-min cron tick.
   const timeoutMs = opts.timeoutMs ?? 20000;
   const retries = opts.retries ?? 1;
+  const baseUrl = opts.baseUrl || NVIDIA_BASE_URL;
 
   const body = JSON.stringify({
     model: req.model,
     messages: req.messages,
-    max_tokens: req.maxTokens ?? 1024,
+    // A donated OpenAI reasoning model (o*, gpt-5*) rejects max_tokens's
+    // successor field name the other way round — see requestExtras' sibling
+    // note on NvidiaModelInfo.useMaxCompletionTokens.
+    ...(req.useMaxCompletionTokens
+      ? { max_completion_tokens: req.maxTokens ?? 1024 }
+      : { max_tokens: req.maxTokens ?? 1024 }),
     temperature: req.temperature ?? 0.7,
     ...(req.topP ? { top_p: req.topP } : {}),
     ...requestExtras(req.model),
@@ -374,11 +410,12 @@ export async function nvidiaChat(
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
     try {
-      const res = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
+          ...(opts.extraHeaders || {}),
         },
         body,
         signal: AbortSignal.timeout(timeoutMs),
@@ -428,7 +465,39 @@ export interface NvidiaChatChainResult extends NvidiaChatResult {
   /** Model ids that answered 404/410 THIS call — the caller should markGone() them. */
   gone: string[];
   /** One entry per model actually tried, in order, for provenance/debugging. */
-  attempts: { id: string; status: number; ms: number }[];
+  attempts: ChainAttempt[];
+}
+
+/**
+ * One link tried by nvidiaChatChain. Donated links are told apart by LINK,
+ * never by model id: two donors (or a donor and the project) can name the same
+ * model, and matching on the id would bill one donor for another's calls.
+ */
+export interface ChainAttempt {
+  id: string;
+  status: number;
+  ms: number;
+  /** Tokens this attempt cost its key — real usage on any 200 (even one `accept` rejected), a prompt estimate on a timeout. */
+  tokens: number;
+  /** Set when this link was a patron's donated model (src/world/donations.ts). */
+  donationId?: number;
+  /** True for the one attempt whose text the chain returned. */
+  won?: boolean;
+}
+
+/**
+ * Text a donated model may not publish: a link or a bare domain. A donor
+ * controls their own provider account, so their model's words get this one
+ * extra check before they can reach the public island and the open dataset;
+ * a reply that fails it falls through to the next link like any bad reply.
+ */
+function looksLikeLink(text: string): boolean {
+  // Deliberately a little eager: a sentence that lost the space after a full
+  // stop right before one of these words ("the tank.online") is refused too.
+  // That only sends one reply to the next model, and the alternative is
+  // publishing a donor's address in Kevin's mouth.
+  return /https?:\/\/|www\.|\bdot\s?com\b/i.test(text)
+    || /\b[a-z0-9][a-z0-9-]{2,}\.(com|net|org|io|ai|co|me|cc|to|gl|us|uk|xyz|ru|cn|info|biz|top|click|link|app|dev|site|online|shop|store|live|tv|gg|ly)\b/i.test(text);
 }
 
 /**
@@ -486,7 +555,7 @@ export async function nvidiaChatChain(
      * emits it. Without `accept`, any 200 wins (the dialogue path, where all prose
      * is valid).
      */
-    accept?: (text: string) => boolean;
+    accept?: (text: string, model: NvidiaModelInfo) => boolean;
     /**
      * Model ids to skip this call — src/world/store.ts's dead-model memory
      * (getGoneModels). If EVERY model in the chain is in `skip`, the skip set
@@ -501,19 +570,23 @@ export async function nvidiaChatChain(
     throw new Error('nvidiaChatChain: empty model chain');
   }
 
-  const allSkipped = opts.skip && models.every((m) => opts.skip!.has(m.id));
+  // `skip` is the project's own dead-model memory; it never applies to a
+  // donated link (a donor's key reaches a different provider/account).
+  const own = models.filter((m) => m.donationId === undefined);
+  const allSkipped = opts.skip && own.every((m) => opts.skip!.has(m.id));
   const skip = allSkipped ? undefined : opts.skip;
 
   let last: NvidiaChatResult | null = null;
   let lastModel = models[0];
   const errors: string[] = [];
   const gone: string[] = [];
-  const attempts: { id: string; status: number; ms: number }[] = [];
+  const attempts: ChainAttempt[] = [];
   let usedFallbackIndex = -1;
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    if (skip?.has(model.id)) continue;
+    const donated = model.donationId !== undefined;
+    if (!donated && skip?.has(model.id)) continue;
     // The tick's hard deadline caps EVERY link, not just the first: a 5-model
     // chain at 45 s a link is almost four minutes, and the tick lock only
     // lives 115 s — past it, the next cron tick would run alongside this one
@@ -525,23 +598,50 @@ export async function nvidiaChatChain(
     }
     const temperature = req.temperature ?? Math.max(0.5, model.goodTemp + (req.tempOffset ?? 0));
     const startedAt = Date.now();
+    // A donated link (model.apiKey set — src/world/donations.ts) is billed to
+    // ITS OWN donor over ITS OWN provider's base URL; every other link falls
+    // back to this call's own apiKey/NVIDIA_BASE_URL exactly as before.
     const res = await nvidiaChat(
-      apiKey,
-      { ...req, model: model.id, temperature },
-      { timeoutMs: Math.min(opts.timeoutMs ?? 30000, left - 1000), retries: 0 }
+      model.apiKey || apiKey,
+      { ...req, model: model.id, temperature, useMaxCompletionTokens: model.useMaxCompletionTokens },
+      {
+        timeoutMs: Math.min(opts.timeoutMs ?? 30000, left - 1000),
+        retries: 0,
+        baseUrl: model.baseUrl,
+        extraHeaders: model.extraHeaders,
+      }
     );
-    attempts.push({ id: model.id, status: res.status, ms: Date.now() - startedAt });
-    if (res.status === 404 || res.status === 410) gone.push(model.id);
+    const attempt: ChainAttempt = {
+      id: model.id,
+      status: res.status,
+      ms: Date.now() - startedAt,
+      // An empty 200 (a reasoning model that spent its whole budget thinking)
+      // and a timeout were both likely billed — estimate the prompt, never 0.
+      tokens: res.ok ? res.totalTokens : res.status === 0 || res.status === 200 ? estimateTokens(req.messages, '') : 0,
+      donationId: model.donationId,
+    };
+    attempts.push(attempt);
+    // A donor's 404/410 says nothing about the project's own copy of that model.
+    if (!donated && (res.status === 404 || res.status === 410)) gone.push(model.id);
 
-    if (res.ok && (!opts.accept || opts.accept(res.text))) {
+    const usable = res.ok && (!opts.accept || opts.accept(res.text, model)) && !(donated && looksLikeLink(res.text));
+    if (usable) {
+      attempt.won = true;
       return { ...res, model, usedFallback: attempts.length > 1 || i > 0, gone, attempts };
     }
     // Keep a usable-transport result as the last resort even if it failed `accept`,
-    // so the caller still gets real text (and tokens) to fall back on.
-    last = res;
+    // so the caller still gets real text (and tokens) to fall back on — but
+    // never a DONATED reply that was refused: it must not reach the page by the
+    // back door when the next link runs out of time.
+    last = donated ? { ...res, ok: false, text: '' } : res;
     lastModel = model;
     if (usedFallbackIndex < 0) usedFallbackIndex = i;
-    errors.push(`${model.id}: ${res.ok ? 'rejected by accept()' : (res.error || 'unknown')}`);
+    // A donated link's error body is the DONOR's provider talking (org ids,
+    // quota text, sometimes a key echo) and this string reaches the public
+    // /health — so only its status is kept.
+    errors.push(donated
+      ? `donated:${model.family}: ${res.ok ? 'rejected' : `HTTP ${res.status || 'timeout'}`}`
+      : `${model.id}: ${res.ok ? 'rejected by accept()' : (res.error || 'unknown')}`);
   }
 
   return {

@@ -28,6 +28,11 @@ import {
 } from './store';
 import { blissHits } from './metrics';
 import type { IslandEnv } from './tick';
+// Lend-a-mind (SPEC4 §A3): donatedChain resolves a signed-in patron's own
+// model+key into ready-to-call chain entries that sit IN FRONT OF the free
+// NVIDIA chain (never replacing it); recordChainDonations feeds each donor's
+// own daily limits and auto-pause-on-errors.
+import { donatedChain, recordChainDonations } from './donations';
 
 /** One fully spoken, gated, persisted turn — what speak() returns and tick.ts records via store.insertTurn. */
 export interface SpokenTurn {
@@ -38,6 +43,10 @@ export interface SpokenTurn {
   remember: string[];
   make?: { kind: string; title: string };
   model: string;
+  /** Set when this turn was spoken by a DONATED model (SPEC4 §A3) — the model_donations.id that answered. */
+  donationId?: number;
+  /** The donated model's own id — same string as `model` above when donationId is set; kept separately so tick.ts's meta object is self-explanatory. */
+  donatedModel?: string;
   tokens: number;
   retries: number;
   retry_reason?: string;
@@ -134,6 +143,8 @@ interface Attempt {
   ok: boolean;
   text: string;
   modelId: string;
+  /** Set when the WINNING model was a donation (SPEC4 §A3). */
+  donationId?: number;
   tokens: number;
   gone: string[];
   /** Real HTTP attempts nvidiaChatChain made THIS call (it may have fallen through several dead/overloaded models before landing one) — never assume 1. */
@@ -156,11 +167,19 @@ async function attemptSpeak(
     timeoutMs: 30000,
     skip: gone,
   });
+
+  // Lend-a-mind bookkeeping (SPEC4 §A3): every donated link THIS call tried
+  // is billed to its own donor, win or lose.
+  await recordChainDonations(env, res.attempts);
+
   if (!res.ok) return { ok: false, text: '', modelId: res.model.id, tokens: res.totalTokens, gone: res.gone, attempts: res.attempts.length };
   await bumpDailyUsage(db, res.totalTokens).catch(() => {});
   const parsed = parseTurn(res.text, agent);
   const gate = gateCheck(parsed, recentSays);
-  return { ok: true, text: res.text, modelId: res.model.id, tokens: res.totalTokens, gone: res.gone, attempts: res.attempts.length, parsed, gate };
+  return {
+    ok: true, text: res.text, modelId: res.model.id, donationId: res.model.donationId,
+    tokens: res.totalTokens, gone: res.gone, attempts: res.attempts.length, parsed, gate,
+  };
 }
 
 export async function speak(
@@ -264,7 +283,20 @@ export async function speak(
   // The quality gate compares a solo agent only against ITS OWN previous solo
   // turns — the partner isn't in this conversation to repeat or overlap with.
   const recentSays = (apart ? ownTurns : sceneTurns).slice(-6).map((t) => t.say);
-  const chain = chainFor(agent);
+  // Lend-a-mind (SPEC4 §A3): any active donation for THIS agent's role goes
+  // in FRONT of the free chain, never replacing it — nvidiaChatChain's own
+  // fall-through already lets it survive a donated key going bad mid-tick,
+  // the exact mechanism that already lets Kevin survive nemotron-3-ultra
+  // being down. `avoid` keeps Kevin and Jenny off the same model (ISLAND.md's
+  // monoculture rule): never the partner's own primary, and never the model
+  // that ACTUALLY answered the partner's last turn in this scene — what was
+  // used, not a guess at what will be, so two adjacent turns can't share one.
+  // Nothing here can block both sides: each can always fall back to its own
+  // free chain.
+  const lastPartnerModel = sceneTurns.filter((t) => t.speaker === partner).slice(-1)[0]?.model;
+  const avoid = [chainFor(partner)[0].id, ...(lastPartnerModel ? [lastPartnerModel] : [])];
+  const donated = await donatedChain(env, agent, avoid).catch(() => []);
+  const chain = donated.length ? [...donated, ...chainFor(agent)] : chainFor(agent);
 
   const first = await attemptSpeak(env, chain, messages, gone, 0, agent, recentSays, db);
   goneOut.push(...first.gone);
@@ -323,6 +355,8 @@ export async function speak(
     remember: p.remember,
     make: p.make,
     model: chosen.modelId,
+    donationId: chosen.donationId,
+    donatedModel: chosen.donationId !== undefined ? chosen.modelId : undefined,
     tokens: chosen.tokens,
     retries,
     retry_reason: retryReason,

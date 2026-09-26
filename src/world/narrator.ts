@@ -12,12 +12,19 @@ import { SLOTS } from './types';
 import type { IslandEnv } from './tick';
 import { CHAPTER_CHAIN, NARRATOR_CHAIN, chainFor } from './models';
 import { NvidiaModelInfo, nvidiaChatChain } from '../core/nvidia';
+// Lend-a-mind (SPEC4 §A3): a signed-in patron may donate a model for role
+// 'narrator' specifically — used ONLY for the narrator's own two model calls
+// below (transition, morningSetup), never for the once-a-day chapter or a
+// visual artifact, to keep this feature's footprint exactly where the spec
+// names it.
+import { donatedChain, recordChainDonations } from './donations';
 import {
   CHAPTER_SYSTEM, NARRATOR_SYSTEM, TransitionPromptInput, chapterUserPrompt, makePrompt, morningUserPrompt,
   transitionUserPrompt,
 } from './prompts';
 import {
   assignApartPlaces, barometerLine, clampTransition, conditionsText, decideMode, pickEvent, resolveLocation, rolls,
+  shouldVisitShrine,
 } from './sim';
 import {
   bumpDailyUsage, getBottleTextsForScenes, getEventsForDay, getRadioCache, getScenesForDay, getSceneTurns,
@@ -26,6 +33,21 @@ import {
 import { updateInboxStatus } from '../db/dialogue';
 import { computeDayMetrics } from './metrics';
 import { sanitizeSvg } from './svg';
+// Patrons (spec §A2): gifts/the shrine are entirely world/gifts.ts's own
+// table + schema (self-healing there, never in store.ts's ensureIslandSchema)
+// — narrator.ts only ever calls these three read helpers, never touches the
+// `gifts` table directly.
+import { countActivePatrons, pendingCrateEvent, shrineFacts } from './gifts';
+
+/**
+ * Donated 'narrator' entries in front of NARRATOR_CHAIN, never replacing it —
+ * and never deduped by model id: if a donor lends the same model the project
+ * runs, the project's own copy must still be there when the donor's key fails.
+ */
+async function narratorChainWithDonations(env: IslandEnv): Promise<NvidiaModelInfo[]> {
+  const donated = await donatedChain(env, 'narrator').catch(() => []);
+  return donated.length ? [...donated, ...NARRATOR_CHAIN] : NARRATOR_CHAIN;
+}
 
 /*
   ⚠️ REAL BUG, FOUND + FIXED LIVE 2026-09-25 (a tick-firing verification run
@@ -135,15 +157,19 @@ function extractJson(text: string): any | null {
 
 /** Picks the world event for the UPCOMING scene, resolving which pending
  *  bottle (if any) a 'bottle' pick refers to. Shared by transition() and
- *  morningSetup(), both of which need "what does the world do next". */
+ *  morningSetup(), both of which need "what does the world do next".
+ *  Patrons (spec §A2): a queued gift is tried ONLY when no bottle forced
+ *  itself — sim.pickEvent's own comment is where "bottles have first claim"
+ *  is actually enforced; this just supplies both candidates. */
 async function pickUpcomingEvent(
   db: D1Database,
   w: World,
   stale: boolean
 ): Promise<{ picked: ReturnType<typeof pickEvent>; bottle: { id: number; content: string } | null }> {
-  const nextBottle = await nextBottleAtSea(db);
+  const [nextBottle, giftPending] = await Promise.all([nextBottleAtSea(db), pendingCrateEvent(db)]);
   let picked = pickEvent(w, { stale, bottlePending: false });
   if (!picked && nextBottle) picked = pickEvent(w, { stale, bottlePending: true });
+  if (!picked && giftPending) picked = pickEvent(w, { stale, bottlePending: false, giftPending });
   const bottle = picked?.kind === 'bottle' && nextBottle ? nextBottle : null;
   return { picked, bottle };
 }
@@ -154,6 +180,11 @@ export interface TransitionEvent {
   kind: string;
   text: string;
   bottleInboxId?: number;
+  /** Patrons (spec §A2): set when `picked.kind === 'lost_crate'` was a forced
+   *  gift arrival rather than the ordinary flavour event of the same kind —
+   *  tick.ts uses this (never the kind alone) to decide whether to actually
+   *  deliver something. */
+  giftId?: string;
 }
 
 export async function transition(
@@ -176,6 +207,13 @@ export async function transition(
   const mode = decideMode(w, nextSlot);
   const places = mode === 'apart' ? assignApartPlaces(w) : undefined;
   const { picked, bottle } = await pickUpcomingEvent(db, w, stale);
+
+  // Patrons (spec §A2): the shrine visit is ALSO code-decided (sim.ts's
+  // shouldVisitShrine, same reasoning as decideMode) — computed here because
+  // it needs a live patron count, and sim.ts is deliberately DB-free.
+  const patronCount = await countActivePatrons(db).catch(() => 0);
+  const forceShrine = shouldVisitShrine(w, nextSlot, patronCount);
+  const shrine = forceShrine ? await shrineFacts(db, 5).catch(() => ({ names: [] as string[], othersCount: 0, recent: [] as string[] })) : undefined;
 
   let radioText: string | null = null;
   if (w.radio_requested) {
@@ -208,13 +246,20 @@ export async function transition(
     sceneWasApart: scene.mode === 'apart',
     mode,
     places,
+    shrine,
   };
   const user = `${transitionUserPrompt(input)}\n\n${conditionsText(w, r)}`;
-  const chain = NARRATOR_CHAIN;
+  // Lend-a-mind (SPEC4 §A3): a patron-donated 'narrator' model, if any, sits
+  // in front of NARRATOR_CHAIN — the same JSON accept() gate below applies
+  // to it automatically, since it's just one more entry in the same chain.
+  const chain = await narratorChainWithDonations(env);
 
   // The most recent answer a model gave that accept() refused — kept so a failed
-  // transition can be diagnosed from the DB (system_state last_rejected_transition).
+  // transition can be diagnosed from the DB (system_state last_rejected_transition,
+  // which /api/state shows publicly). Never a donated model's text: a donor's
+  // refused words must not be published through a debug field.
   let lastRejected = '';
+  const reject = (model: NvidiaModelInfo, why: string) => { if (model.donationId === undefined) lastRejected = why; };
   const attempt = async (u: string) => {
     const res = await nvidiaChatChain(env.NVIDIA_API_KEY!, chain, {
       messages: [{ role: 'system', content: NARRATOR_SYSTEM }, { role: 'user', content: u }],
@@ -223,9 +268,9 @@ export async function transition(
     }, {
       timeoutMs: 45000,
       skip: gone,
-      accept: (text) => {
+      accept: (text, model) => {
         const parsed = extractJson(text);
-        if (!(parsed && typeof parsed.summary === 'string' && parsed.next_scene && typeof parsed.next_scene.setup === 'string')) { lastRejected = `[shape] ${text}`; return false; }
+        if (!(parsed && typeof parsed.summary === 'string' && parsed.next_scene && typeof parsed.next_scene.setup === 'string')) { reject(model, `[shape] ${text}`); return false; }
         if (mode === 'apart' && places) {
           // An answer that writes someone's solo setup somewhere OTHER than the
           // place code assigned would put the figure at the dock and the words at
@@ -235,7 +280,7 @@ export async function transition(
           const fits = (e: any, id: 'kevin' | 'jenny') =>
             !!e && typeof e.setup === 'string' && (!e.location || resolveLocation(e.location, w) === places[id]);
           const ok = fits(ns.kevin ?? ns.apart?.kevin, 'kevin') && fits(ns.jenny ?? ns.apart?.jenny, 'jenny');
-          if (!ok) lastRejected = `[places ${JSON.stringify(places)}] ${text}`;
+          if (!ok) reject(model, `[places ${JSON.stringify(places)}] ${text}`);
           return ok;
         }
         return true;
@@ -243,6 +288,7 @@ export async function transition(
     });
     goneOut.push(...res.gone);
     callsOut.push(res.attempts.length);
+    await recordChainDonations(env, res.attempts).catch(() => {});
     return res;
   };
 
@@ -301,10 +347,26 @@ export async function transition(
     });
   }
 
+  /*
+    Patrons (spec §A2): CODE pins the location, exactly like the apart-places
+    pin above — the prompt's "DECIDED: … Location id: 'shrine'" line
+    (prompts.ts's decisionLine) is a courtesy to the model, not the guarantee.
+    Only when a real transition actually happened (never on the fallback
+    quiet-stretch, which already means "nothing was decided this stretch") —
+    otherwise the visit simply waits for the next eligible evening rather than
+    being silently marked done.
+  */
+  if (forceShrine && t && !usedFallback) {
+    t.next.location = 'shrine';
+    w.last_shrine_visit_day = nextDay;
+  }
+
+  const giftIdOut = picked && !usedFallback && (picked.data as any)?.giftId ? String((picked.data as any).giftId) : undefined;
+
   return {
     t,
     model: modelId,
-    event: picked && !usedFallback ? { kind: picked.kind, text: picked.text, bottleInboxId: bottle?.id } : null,
+    event: picked && !usedFallback ? { kind: picked.kind, text: picked.text, bottleInboxId: bottle?.id, giftId: giftIdOut } : null,
   };
 }
 
@@ -323,7 +385,8 @@ export async function morningSetup(
 
   const { picked, bottle } = await pickUpcomingEvent(db, w, false);
   const user = morningUserPrompt(w, yesterday, picked?.text ?? null);
-  const chain = NARRATOR_CHAIN;
+  // Lend-a-mind (SPEC4 §A3): see the identical comment in transition() above.
+  const chain = await narratorChainWithDonations(env);
 
   const res = await nvidiaChatChain(env.NVIDIA_API_KEY, chain, {
     messages: [{ role: 'system', content: NARRATOR_SYSTEM }, { role: 'user', content: user }],
@@ -332,6 +395,7 @@ export async function morningSetup(
   }, { timeoutMs: 40000, skip: gone, accept: (text) => !!extractJson(text) });
   goneOut.push(...res.gone);
   callsOut.push(res.attempts.length);
+  await recordChainDonations(env, res.attempts).catch(() => {});
   if (!res.ok) return null;
   await bumpDailyUsage(db, res.totalTokens).catch(() => {});
 
@@ -357,6 +421,7 @@ export async function morningSetup(
     setup,
     event: picked?.kind,
     bottle_id: bottle?.id,
+    gift_id: (picked?.data as any)?.giftId ? String((picked!.data as any).giftId) : undefined,
   };
 }
 

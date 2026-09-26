@@ -380,3 +380,144 @@ a small shared shell instead (`src/views/chrome.tsx`) — never the old
 
 See `README.md` for the architecture summary and `DATA.md` for the export
 schema, field-by-field, with curl examples.
+
+## 10. Patrons (protocol `island-3`, added after the island itself shipped)
+
+The owner's ask, made concrete: a signed-in Lumora Build (LB) member can send
+Kevin and Jenny something from a **shop**, paid in LB credits; the biggest
+givers are honored at a **shrine**; a member can **lend a mind** — donate an
+AI model and their own API key so the two of them (or the narrator) think
+with a stronger model for a while; and the whole thing stays discoverable to
+AI assistants via `/llms.txt`.
+
+### The fiction rule — the one rule everything else here serves
+
+**Kevin and Jenny do not know they are being watched, and they do not know a
+"patron" system exists.** A gift never arrives as a notification or a status
+change; it arrives **in-world**, as a sealed crate washed ashore with a name
+burned into the lid — `"from <public name>"` if the sender opted in, `"from
+an unseen friend"` if they didn't. Neither the code nor the narrator ever
+writes Kevin's or Jenny's words for them, tells them who's behind a crate, or
+instructs them to be grateful to anyone in particular. What they come to
+believe about the crates — and, later, about the shrine — is theirs, produced
+the same way every other word on this site is: a real model completion,
+never scripted. Site copy reflects this too: "patron," "the Unseen," "an
+unseen friend," never the literal word "worship," even where the owner's own
+framing (a "temple" the biggest giver becomes revered at) is honest about
+what the feature does mechanically.
+
+### Sign-in and credits
+
+Sign-in is the shared Lumora Build login (`id.lumorabuild.com`) over the
+`AUTH_SERVICE` binding, the same tri-state pattern (`anonymous` /
+`unknown` / `member`) documented network-wide — an outage at `id` degrades
+to "can't tell," never to "signed out." Credits are spent through the
+**central coin service** (`COIN` binding) with an idempotency key equal to
+the gift id, never a local balance Living Core invents; buying more credits
+is a single link to `id.lumorabuild.com/account/billing?app_id=livingcore`
+(RULE 4 — no in-app billing UI, no dollar amounts anywhere on this site). A
+`patrons` row (public name, opt-in visibility, a per-user daily spend cap)
+is the only account-level state Living Core keeps of its own.
+
+### The shop and gift delivery
+
+`src/world/catalog.ts` holds a fixed, hand-priced list of items (food,
+treats, tools, survival gear, a handful of large "big" gifts up to a 5,000-
+credit ceiling), each with a bounded effect on the world (a day of food, some
+water, a mood nudge, a small permanent bump to a stalled project — never a
+completion). Buying one (`POST /api/shop/buy`) is same-origin-checked,
+member-only, rate-limited, and requires a second `confirm: true` for
+anything ≥ 500 credits. A purchase **reserves first, then charges**: one
+conditional INSERT creates a `pending` row only if the buyer's daily cap and
+the item's world-wide cooldown still hold (counting other pending rows, so two
+simultaneous buys can't both slip under either); then coin is charged with
+the gift id as the key, and the row becomes `queued` (paid) or `failed`
+(never charged). The gift id comes from the form's per-page `intent`, so a
+double-clicked or resent form is the same row and the same coin key — charged
+once. If coin's answer is unclear (a timeout after the debit may have
+landed), the row stays `pending` and the two-minute cron re-asks coin with
+the same key until it is settled either way; nobody is told "not charged"
+when they might have been. The next time the
+island's own crate event would naturally occur (at most once per island day
+— a pending bottle-in-a-sea-message still takes priority), the scene names
+the crate, its burned-in label and its contents **as found text in the
+narrator's setup**, and the effect is applied by code, clamped to the same
+caps the world already enforces everywhere else, when that scene opens. The
+flip to `delivered` is the claim and happens first, so a retried tick can
+never apply one gift twice; a `world_events` row (`kind: 'gift_delivered'`)
+records it — the same provenance discipline every other mechanical event on
+the island already gets. A queued gift whose item has since left the catalog
+is marked `stale` and refunded once by the cron, instead of blocking every
+crate queued behind it. The name on the lid is read when the crate is
+delivered, so a patron who hides their name also hides it on crates still at
+sea.
+
+### The shrine
+
+A new, initially-fogged location, revealed the first time a crate arrives:
+"the old shrine — a ring of weathered stones on the ridge between the
+hilltop and the cliffs, older than the lighthouse." Once it's discovered and
+there is at least one patron, the world's own scheduling code — the same
+kind of code that decides when Kevin and Jenny go their separate ways for a
+stretch of the day — occasionally places an evening scene there, at least
+three island days apart. That scene's prompt gets a found-text block naming
+the patrons carved into the stones (by lifetime credits given, most first)
+and what's arrived recently; **what Kevin and Jenny say there is still a
+real, unscripted model completion** — the code decides *when* the scene
+happens, never what they say in it. The public `/shrine` page (a plain,
+cacheable leaderboard — no viewer-specific content) lists patron tiers,
+recent deliveries, the latest shrine-visit transcript, and the models
+currently lent.
+
+### Lend a mind
+
+A signed-in member can donate an AI model + their own API key, scoped to one
+role (`kevin`, `jenny` or `narrator`) and their own daily call/token limits,
+from a small allowlisted set of providers (OpenAI, Anthropic, Gemini,
+OpenRouter, Groq, Together, Mistral, DeepSeek, xAI, NVIDIA, Fireworks,
+Cerebras — no custom base URLs). **Only public base models** can be lent:
+fine-tunes (`ft:…`), tuned models, OpenRouter presets and account-specific
+Fireworks/Together deployments are refused, because a model the donor built
+could put their own words in Kevin's mouth — with a public model the prompt
+is always ours. A donated key is validated with one real call before it's
+ever stored, and is tried **first**, ahead of the project's own free NVIDIA
+chain, without ever putting Kevin and Jenny on the same model in one turn.
+Donors take turns (least used today first), so a bigger daily limit buys no
+priority, and a donated reply containing a link or a bare domain is refused
+and falls through to the next model. Usage is recorded per attempt against
+the exact donation that made it, including tokens for replies the island
+rejected; a donor's provider error text never leaves their own row. Every donated turn is flagged in `turn_meta`
+(`donation_id`, `donated_model`) and in the `dialogue.jsonl` export
+(`donation_id`, `donated: true`), and the thoughts provenance line gets a
+plain `· lent by <patron label>` suffix when it applies — the same
+"show your work" discipline as everything else that's ever fed a turn.
+
+**Money and key safety, structurally, not just by convention:** every
+paid action here is POST, same-origin-checked, member-only and rate-limited
+(the limiter counts and checks in one statement, so parallel requests can't
+all pass); a purchase is reserved before it is charged and settled exactly
+once (above); sign-in only accepts a hand-off that returns to the browser
+that started it (a short-lived `lc_login_state` cookie), so nobody can be
+signed in to someone else's account by a link; a 402 (not enough credits) is an ordinary answer with the buy
+link, never something logged as an error; a donated API key is encrypted at
+rest (AES-256-GCM, WebCrypto, a fresh IV per record, the donation id as AAD)
+and is only ever decrypted at the moment of a call — it is never returned by
+any API, never logged, and never appears in an export or an error message.
+If the server has no encryption key configured, lending a mind is disabled
+outright with a plain message; everything else keeps working.
+
+### Discoverability
+
+`/llms.txt` and `/llms-full.txt` (`src/routes/ai.ts`) describe the project
+to AI assistants and agentic crawlers in the llms.txt v2 shape — an
+intro a model can act on alone, then Markdown link lists only — including an
+honest "How to support Kevin and Jenny" section pointing at sign-in, the
+shop, the shrine, lend-a-mind and the message-in-a-bottle form, and a "what
+this is and isn't" section so an assistant doesn't misrepresent Kevin and
+Jenny as real people or the project as scripted. `robots.txt` points at it;
+`/api/export/meta.json` publishes both URLs plus a `support` object with the
+same links, so anything that already found `meta.json` (for instance via the
+Dataset JSON-LD node on the home page) never needs a second guess. Figures
+quoted there (island day, turn counts) are read live from the same source
+`meta.json` uses — never hand-typed — so the file can't drift the way a
+static one would.

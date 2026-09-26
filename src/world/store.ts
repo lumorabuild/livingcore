@@ -177,6 +177,11 @@ export async function ensureIslandSchema(db: D1Database): Promise<void> {
   await ensureColumn(db, 'turn_meta', 'activity', `activity TEXT NOT NULL DEFAULT 'idle'`);
   await ensureColumn(db, 'scenes', 'mode', `mode TEXT NOT NULL DEFAULT 'together'`);
   await ensureColumn(db, 'scenes', 'apart_json', `apart_json TEXT`);
+  // Lend-a-mind (SPEC4 §A3, protocol island-3): which donated model (if any)
+  // spoke this turn. NULL for every turn before this shipped and every turn
+  // that used the free NVIDIA chain — see types.ts#TurnMetaRow.
+  await ensureColumn(db, 'turn_meta', 'donation_id', `donation_id INTEGER`);
+  await ensureColumn(db, 'turn_meta', 'donated_model', `donated_model TEXT`);
 
   schemaReady = true;
 }
@@ -485,12 +490,13 @@ export async function insertTurn(db: D1Database, input: InsertTurnInput): Promis
        VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM dialogue_turns), ?, ?, ?, ?, 'island', ?, ?)`
     ).bind(input.speaker, content, input.thoughtsLine, input.meta.memory_refs, input.turnGroup, legacyNow),
     db.prepare(
-      `INSERT INTO turn_meta (turn_id, era, protocol, scene_id, sim_day, sim_slot, location, thought, action, model, retries, retry_reason, notebook_refs, memory_refs, activity, created_at)
-       VALUES ((SELECT last_insert_rowid()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO turn_meta (turn_id, era, protocol, scene_id, sim_day, sim_slot, location, thought, action, model, retries, retry_reason, notebook_refs, memory_refs, activity, donation_id, donated_model, created_at)
+       VALUES ((SELECT last_insert_rowid()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       input.meta.era, input.meta.protocol, input.meta.scene_id, input.meta.sim_day, input.meta.sim_slot,
       input.meta.location, input.meta.thought, input.meta.action, input.meta.model, input.meta.retries,
-      input.meta.retry_reason, input.meta.notebook_refs, input.meta.memory_refs, input.meta.activity, isoNow
+      input.meta.retry_reason, input.meta.notebook_refs, input.meta.memory_refs, input.meta.activity,
+      input.meta.donation_id ?? null, input.meta.donated_model ?? null, isoNow
     ),
     db.prepare(
       `UPDATE system_state SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT), updated_at = ? WHERE key = 'total_dialogue_turns'`

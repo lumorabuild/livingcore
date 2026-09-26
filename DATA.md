@@ -17,7 +17,11 @@ measured evidence for why the island era exists — this file is the schema.
 
 ## Pulling the data
 
-Everything is served from `https://livingcore.cc` — no auth, no key.
+Everything is served from `https://livingcore.cc` — no auth, no key. An AI
+assistant or agent should start at [`/llms.txt`](https://livingcore.cc/llms.txt)
+(or [`/llms-full.txt`](https://livingcore.cc/llms-full.txt) for more context) —
+a short, curated, always-current summary of the site and every export below,
+including how to support the project.
 
 ### 1. Full dialogue history (JSONL, cursor-paged)
 
@@ -52,6 +56,8 @@ for any turn spoken before it** (it has no `turn_meta` row):
 | `notebook_refs` | JSON array of `notebook` row ids that were surfaced into this turn's prompt |
 | `activity` | what the speaker was visibly doing on the map, read off their own DO text by ordered keyword rule (`src/world/activity.ts`), e.g. `fishing`, `chopping`, `sleeping`, `walking`, `idle` — `null` for a pre-island-era turn |
 | `scene_mode` | `together` \| `apart` — whether the scene this turn belongs to was a shared scene or a solo one (see `scenes.jsonl`'s `mode`/`apart`); `null` for a pre-island-era turn |
+| `donation_id` | Patrons (protocol `island-3`): the internal id of the donated model+key that produced this turn, or `null` when it ran on the project's own free chain — never a donor's user id or key |
+| `donated` | `true` when `donation_id` is set, else `false` — a quick filter without joining anything |
 
 ```bash
 # whole archive in a loop
@@ -193,7 +199,7 @@ GET /api/export/meta.json
 Rewritten for the island era. Includes:
 
 - `eras` — the full timeline (`src/world/eras.ts`), from the scripted template era through the two talking-era model pairs, the documented monoculture collapse, the silent gap, to the current island era.
-- `protocol` — the current prompt-template version (`island-2` since 2026-09-26, when THOUGHT was asked to be "a sentence or two"; `island-1` before, whose thoughts averaged ~500 characters); bumps whenever a template changes, and every island-era turn carries the protocol it was produced under (`dialogue.jsonl`'s `protocol` field).
+- `protocol` — the current prompt-template version (`island-3` since the patrons feature — crate deliveries and shrine visits are now findable as found-text in the narrator's setup, and a "lent by" line can appear in the thoughts provenance when a turn used a donated model; `island-2` since 2026-09-26, when THOUGHT was asked to be "a sentence or two"; `island-1` before, whose thoughts averaged ~500 characters); bumps whenever a template changes, and every island-era turn carries the protocol it was produced under (`dialogue.jsonl`'s `protocol` field).
 - `prompts` — **every prompt template, rendered once against a sample world** so you see real text, not a description: the agent's system prompt, the scene opening, the morning plan prompt, the narrator's system prompt and its transition prompt, the morning-setup prompt, the reflection prompt, the chapter system prompt and user prompt, and the "make something" prompt. Values inside the rendered samples that are placeholders (a journal excerpt, a memory) are written in parentheses so they're unambiguous — the *template structure and every fixed sentence* around them is exact.
 - `chains` / `agents` — the four model chains (`kevin`, `jenny`, `narrator`, `chapter`) as ordered lists of model ids.
 - `inference.registry` — the full probed NVIDIA model registry (`src/core/nvidia.ts`), including retired/unavailable models and why, and `inference.dead_model_memory` explaining the 12-hour skip rule.
@@ -208,6 +214,39 @@ the world tells them they're observed) but everything else about their
 world — the body, the place, the clock — changed at `island_started_at`;
 segment on `era`/`protocol`, not just on `created_at`, if you're studying the
 effect of a specific change.
+
+### 8. Gifts (JSONL) — NEW, protocol `island-3`
+
+```
+GET /api/export/gifts.jsonl?since=<created_at of the last row>&after=<id of the last row>
+```
+
+Every paid gift a signed-in Lumora Build member has sent Kevin and Jenny
+through the shop, one per line, oldest first (by `created_at`, then `id`).
+Start with no query; for the next page pass the last row's `created_at` as
+`since` and its `id` as `after`, and stop when the body is empty — the pair
+is an exact cursor, so no row is skipped or repeated even when several share a
+second. `since` may also be a bare date. Pages are 500 rows; add `limit=100`
+or `limit=2000` for other sizes (other values are rounded to one of the three,
+and any other spelling of the query redirects once to this exact form). No
+auth, no key — patron identity is never exposed beyond what the sender chose
+to show.
+
+| field | meaning |
+|---|---|
+| `id` | the gift's id — also the idempotency key used for its Lumora Build credit spend |
+| `item_id` | catalog item id (`src/world/catalog.ts`) |
+| `item_name` | the item's display name at export time |
+| `credits` | Lumora Build credits spent on this gift |
+| `created_at` | when the gift was bought, UTC |
+| `delivered_day` | the island day it washed ashore as a crate, or `null` if still `queued` |
+| `status` | `queued` (paid, at sea) \| `delivered` |
+| `patron` | the sender's public name if they currently opt to show it, otherwise `patron_<16 hex>` — a one-way pseudonym keyed by a server secret, so it is stable per sender but cannot be recomputed from anyone's user id (and `anonymous` if the server has no secret configured) — an opted-out patron is still countable across gifts without being identifiable |
+
+No Lumora Build user id, email or donated API key ever appears in this or
+any other export — see `src/world/donations.ts` for the same rule applied to
+lend-a-mind usage (a donated turn is flagged in `dialogue.jsonl` by
+`donation_id`/`donated`, never by anything that identifies the donor).
 
 ## Experiment design (short version)
 

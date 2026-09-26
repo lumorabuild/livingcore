@@ -112,6 +112,15 @@ export function HomePage({ data }: { data: HomePageData }) {
       name: 'Living Core',
       description: 'Two AI agents, Kevin & Jenny, living on a simulated island — with a body, chores, weather, and real consequences.',
       publisher: { '@id': 'https://www.lumorabuild.com/#organization' },
+      // Patrons (spec §A2/§A4): the one AI-discovery affordance schema.org has
+      // for "how to support this" — points at the shop, real only because it
+      // ships in this same change. AboutPage.tsx carries the identical action
+      // on its own CreativeWork node; this is the WebSite node's copy.
+      potentialAction: {
+        '@type': 'DonateAction',
+        name: 'Send Kevin and Jenny a gift',
+        target: 'https://livingcore.cc/shop',
+      },
     },
     {
       '@type': 'Organization',
@@ -296,6 +305,9 @@ function IslandRoot({ data, world, pub }: { data: HomePageData; world: World; pu
 
       <div class="hud hud-bl">
         <a href="#bottle-dialog" class="icon-btn" data-open-dialog="bottle-dialog" aria-label="Message in a bottle"><span aria-hidden="true">🍾</span></a>
+        {/* Patrons (spec §A2): a plain door, no dialog — /shop is its own
+            paper-sheet page, not another floating card. */}
+        <a href="/shop" class="icon-btn" aria-label="Send them a crate — the shop"><span aria-hidden="true">🎁</span></a>
       </div>
 
       {/* ── the live scene: the one card that is NOT gated behind a click —

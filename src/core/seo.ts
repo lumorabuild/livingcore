@@ -36,6 +36,7 @@ Allow: /
 Allow: /api/export/
 Disallow: /__cron
 Disallow: /api/
+Disallow: /auth/
 
 # Everyone else (Googlebot, Bingbot, etc.)
 User-agent: *
@@ -43,7 +44,9 @@ Allow: /
 Allow: /api/export/
 Disallow: /__cron
 Disallow: /api/
+Disallow: /auth/
 
+# Plain-text brief for language models: ${SITE}/llms.txt
 Sitemap: ${SITE}/sitemap.xml
 `;
 }
@@ -151,6 +154,12 @@ export async function buildSitemapXml(db: D1Database): Promise<string> {
     urlEntry(`${SITE}/notebook`, siteUpdated, 'daily', '0.7'),
     urlEntry(`${SITE}/lab`, siteUpdated, 'daily', '0.6'),
     urlEntry(`${SITE}/about`, siteUpdated, 'monthly', '0.4'),
+    // Patrons (spec §A2/§A4): both are public, indexable pages (neither sets
+    // `noindex` in BaseLayout — see ShopPage.tsx / ShrinePage.tsx). /account
+    // deliberately never appears here: it renders a signed-in viewer's own
+    // state and is `noindex` (AccountPage.tsx).
+    urlEntry(`${SITE}/shop`, siteUpdated, 'weekly', '0.5'),
+    urlEntry(`${SITE}/shrine`, siteUpdated, 'daily', '0.5'),
   ];
 
   for (const g of groups.results || []) {

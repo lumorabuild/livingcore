@@ -132,6 +132,17 @@ h3 { font-size: 1.02rem; }
 p { margin: 0 0 .8em; }
 img, svg { max-width: 100%; display: block; }
 button, input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
+/* Every text field and select gets the paper surface. `color: inherit` above
+   gives controls the page's ink, so a control left on the browser's default
+   white box was cream-on-white (≈1.2:1) in dark mode. :where() keeps this at
+   zero specificity, so any styled field (e.g. .bottle-row) still wins. */
+:where(input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=submit], [type=button]), select, textarea) {
+  background: var(--paper-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  min-height: 40px;
+}
 ul { padding-left: 1.2em; }
 
 .prose {
@@ -546,7 +557,12 @@ body.v-map {
 .hud-bl { bottom: 14px; left: 14px; }
 /* Both bottom clusters clear the phone live-panel sheet — the zoom buttons sat
    ON the sheet at 390px (seen live 2026-09-25), only the bottle had been moved. */
-@media (max-width: 1023px) { .hud-bl, .hud-br { bottom: 108px; } }
+@media (max-width: 1023px) {
+  .hud-bl, .hud-br { bottom: 108px; }
+  /* An expanded scene sheet grows up into this band — step the icons aside
+     while it is open, or they sit on top of the words being read. */
+  body:has(.island-panel[data-expanded="true"]) :is(.hud-bl, .hud-br) { visibility: hidden; }
+}
 /* Layout fix #1: the live panel moved from bottom-centre to a right-hand
    dock (see `.island-panel`'s ≥1024px rules below) — the zoom cluster,
    still "bottom-right" per SPEC3, shifts left to clear it (360px card +

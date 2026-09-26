@@ -49,6 +49,15 @@
       "database_id": "d599879f-2195-4fe5-99c1-5c845d01683f"
     }
   ],
+  // LB (Lumora Build) integration — sign-in over `id`, credit spend over
+  // `coin`. Both are free-tier service bindings, never a public fetch (see
+  // docs/LB-INTEGRATION.md). `id` must have a row for app_id "livingcore" in
+  // its own `apps`/`app_return_urls` tables before sign-in works at all — a
+  // one-time remote write to `lumora-id-db`, not something this repo can do.
+  "services": [
+    { "binding": "AUTH_SERVICE", "service": "id" },
+    { "binding": "COIN", "service": "coin" }
+  ],
   // Kevin & Jenny are only alive while this fires. THIS FILE IS THE SOURCE OF TRUTH:
   // every deploy overwrites the Worker's schedule with exactly what's below, so a cron
   // edited in the Cloudflare dashboard silently reverts on the next push. Change it here.

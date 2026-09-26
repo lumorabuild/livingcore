@@ -21,10 +21,19 @@ import { speak, planDay, reflect } from './agent';
 import { transition, morningSetup, writeChapter, makeArtifact } from './narrator';
 import { updateInboxStatus } from '../db/dialogue';
 import { setCallDeadline } from '../core/nvidia';
+// Patrons (spec §A2): the gifts table + its own schema self-heal live entirely
+// in world/gifts.ts — tick.ts only ever calls this one delivery function.
+import { deliverGift } from './gifts';
+// Lend-a-mind (SPEC4 §A3): only donationLabel is needed here (for the
+// provenance line below) — the chain-selection itself lives entirely inside
+// agent.ts/narrator.ts, which already receive this same `env`.
+import { donationLabel } from './donations';
 
 export interface IslandEnv {
   DB: D1Database;
   NVIDIA_API_KEY?: string;
+  /** Lend-a-mind (SPEC4 §A3): the master key for decrypting donated API keys. Undefined = the feature is off. */
+  LIVINGCORE_ENCRYPTION_KEY?: string;
 }
 
 export interface TickResult {
@@ -171,6 +180,22 @@ async function runOpenSceneJob(
     await setBottle(db, next.bottle_id, { status: 'ashore', scene_id: sceneId });
     await updateInboxStatus(db, next.bottle_id, 'processing');
     w.last_bottle_day = w.day;
+  }
+
+  /*
+    Patrons (spec §A2): the gift's effects are applied and its row marked
+    delivered THE MOMENT this scene opens — same "code decides, never the
+    model" boundary as everything else in applyTransition (sim.ts). Never
+    threaded into an agent's own turn context: the crate's contents already
+    reached the narrator as the event text that shaped this scene's `setup`
+    (narrator.ts's pickUpcomingEvent → transitionUserPrompt's "SOMETHING THE
+    WORLD DOES NEXT"), so the found text a reader sees is that setup, exactly
+    like every other flavour event. Best-effort: a delivery that fails here
+    leaves the gift 'queued' and it is simply offered again the next time a
+    crate event is due, rather than failing scene-open outright.
+  */
+  if (next.gift_id) {
+    await deliverGift(db, w, next.gift_id, sceneId).catch(() => {});
   }
 
   w.next = null;
@@ -322,7 +347,7 @@ async function runCloseSceneJob(
       { kind: 'plan', agent: 'kevin' }, { kind: 'plan', agent: 'jenny' }, { kind: 'open_scene' },
     );
   } else {
-    w.next = { ...t.next, bottle_id: event?.bottleInboxId, event: event?.kind };
+    w.next = { ...t.next, bottle_id: event?.bottleInboxId, event: event?.kind, gift_id: event?.giftId };
     w.jobs.push({ kind: 'open_scene' });
   }
 
@@ -582,8 +607,17 @@ export async function runTick(env: IslandEnv): Promise<TickResult> {
         notebook_refs: JSON.stringify(r.notebookIds.map((id) => `note:${id}`)),
         memory_refs: JSON.stringify(r.recalledMemoryRefs),
         activity,
+        donation_id: r.donationId ?? null,
+        donated_model: r.donationId !== undefined ? (r.donatedModel ?? r.model) : null,
       };
-      const thoughtsLine = `${BIOGRAPHIES[speaker].emoji} ${BIOGRAPHIES[speaker].name} · ${r.model} · ~${r.tokens} tok · island`;
+      // Lend-a-mind provenance (SPEC4 §A3): a turn a donated model produced
+      // gets the patron's OWN opt-in label appended — never their user id,
+      // never their email (donationLabel resolves through lb/patrons.ts's
+      // patronLabel, the same "an unseen friend" default the crate/shrine
+      // copy uses everywhere else).
+      const thoughtsLine = r.donationId !== undefined
+        ? `${BIOGRAPHIES[speaker].emoji} ${BIOGRAPHIES[speaker].name} · ${r.model} · ~${r.tokens} tok · island · lent by ${await donationLabel(env.DB, r.donationId)}`
+        : `${BIOGRAPHIES[speaker].emoji} ${BIOGRAPHIES[speaker].name} · ${r.model} · ~${r.tokens} tok · island`;
 
       await insertTurn(env.DB, { speaker, say: r.say, thoughtsLine, turnGroup: scene.id, meta });
 
