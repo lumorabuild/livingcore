@@ -29,6 +29,9 @@
     { "path": "/notebook", "status": 200, "mustContain": ["Notebook"] },
     { "path": "/about", "status": 200, "mustContain": ["About"] },
     { "path": "/archive", "status": 200, "mustContain": ["Archive"] },
+    { "path": "/shop", "status": 200, "mustContain": ["crate", "credits"] },
+    { "path": "/shrine", "status": 200, "mustContain": ["shrine"] },
+    { "path": "/account", "status": 200, "mustContain": ["Your account", "Sign in"] },
     { "path": "/this-page-does-not-exist", "status": 404 }
   ],
   "noJs": { "minWords": 60, "mustContain": ["<h1"] },
